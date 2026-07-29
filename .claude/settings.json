@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(**)",
+      "Edit(src/**)",
+      "Edit(tests/**)",
+      "Edit(supabase/**)",
+      "Edit(ESTADO.md)",
+      "Edit(CLAUDE.md)",
+      "Bash(npm run *)",
+      "Bash(npm test*)",
+      "Bash(npx supabase *)",
+      "Bash(git status)",
+      "Bash(git diff*)",
+      "Bash(git log*)"
+    ],
+    "ask": [
+      "Bash(git push*)",
+      "Bash(npx vercel*)",
+      "Edit(docs/**)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Bash(rm -rf *)"
+    ]
+  }
+}
