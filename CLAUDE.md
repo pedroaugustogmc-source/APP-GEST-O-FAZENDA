@@ -96,7 +96,7 @@ npm run gabarito       # roda a fixture do Anexo A e compara com o esperado
 
 | Fase | Escopo | Estado |
 |---|---|---|
-| F0 | Perguntas de contexto (máx. 10) e suposições declaradas | ⬜ |
+| F0 | Perguntas de contexto (máx. 10) e suposições declaradas | ✅ |
 | F1 | DDL + RLS + seed de parâmetros e vacinas + auth admin + shell PWA + importador de planilha | ⬜ |
 | F2 | Bot + transcrição + extração + validação + fila offline + fila de revisão + RBAC | ⬜ |
 | F3 | Mapa de pastos + rebanho cria/recria + calendário sanitário + dashboard | ⬜ |
