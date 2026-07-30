@@ -1,0 +1,74 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Paleta de campo — verde pastagem, terra, areia (docs/05-arquitetura.md §38) */
+    --background: 40 30% 97%;
+    --foreground: 100 15% 15%;
+
+    --primary: 100 30% 28%;
+    --primary-foreground: 40 30% 97%;
+
+    --secondary: 25 35% 32%;
+    --secondary-foreground: 40 30% 97%;
+
+    --muted: 40 20% 90%;
+    --muted-foreground: 100 10% 35%;
+
+    --accent: 40 25% 85%;
+    --accent-foreground: 100 15% 15%;
+
+    /* Reservado exclusivamente para alerta crítico. Nunca usar como cor de erro genérica. */
+    --critico: 0 72% 42%;
+    --critico-foreground: 40 30% 97%;
+
+    --border: 40 15% 82%;
+    --input: 40 15% 82%;
+    --ring: 100 30% 28%;
+
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 100 15% 10%;
+    --foreground: 40 30% 92%;
+
+    --primary: 100 35% 55%;
+    --primary-foreground: 100 15% 10%;
+
+    --secondary: 25 30% 40%;
+    --secondary-foreground: 40 30% 92%;
+
+    --muted: 100 10% 18%;
+    --muted-foreground: 40 15% 70%;
+
+    --accent: 100 10% 20%;
+    --accent-foreground: 40 30% 92%;
+
+    --critico: 0 65% 50%;
+    --critico-foreground: 40 30% 95%;
+
+    --border: 100 10% 22%;
+    --input: 100 10% 22%;
+    --ring: 100 35% 55%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-size: 16px;
+  }
+
+  /* Alvos de toque >= 48px (§38) para uso a sol forte e dedo sujo */
+  button,
+  a,
+  input,
+  select {
+    min-height: 48px;
+  }
+}

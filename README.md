@@ -2,7 +2,7 @@
 
 Cria-recria + leite · sul do Maranhão · PWA offline-first + captura de campo por voz.
 
-Este repositório ainda **não tem código** — tem a especificação completa e a configuração para o Claude Code construir o sistema fase por fase.
+Este repositório tem a especificação completa em `docs/` e o código da **Fase 1 — Fundação** (banco, RLS, PWA, cadastros básicos, importador). As fases seguintes (bot, mapa de pastos, financeiro, máquinas, WhatsApp) ainda não foram construídas — ver a tabela de fases em `CLAUDE.md`.
 
 ---
 
@@ -29,6 +29,61 @@ Você deve ver `CLAUDE.md` na lista. Se não aparecer, você não está na pasta
 
 ---
 
+## Fase 1 — Fundação: passo a passo do zero
+
+1. **Instale as dependências**
+
+   ```bash
+   npm install
+   ```
+
+2. **Configure o Supabase**
+   - Se ainda não tem um projeto, crie um em [supabase.com/dashboard](https://supabase.com/dashboard).
+   - Copie `.env.example` para `.env.local` e preencha:
+     - `NEXT_PUBLIC_SUPABASE_URL` e `NEXT_PUBLIC_SUPABASE_ANON_KEY` — painel do projeto → Project Settings → API.
+     - `SUPABASE_SERVICE_ROLE_KEY` — mesma tela, campo `service_role` (secreta — nunca comitar, nunca no cliente).
+   - Instale a CLI do Supabase (`npm install -g supabase`) e rode `supabase link --project-ref <ref-do-projeto>`, ou use `supabase start` para subir tudo localmente em Docker.
+
+3. **Aplique a migração e o seed**
+
+   ```bash
+   npm run db:reset
+   ```
+
+   Isso roda `supabase/migrations/20260730120000_schema_inicial.sql` (schema completo + RLS + auditoria) e `supabase/seed.sql` (parâmetros de fábrica + catálogo de vacinas) do zero. Nenhum dado específico desta fazenda é semeado — pastos, rebanho, máquinas e insumos você cadastra pelo app (decisão da Fase 0, ver `ESTADO.md`).
+
+4. **Crie o primeiro admin** — o cadastro público está desligado de propósito (§M11: só admin cria acesso)
+   - No Supabase Studio: Authentication → Users → Add user (e-mail + senha).
+   - Copie o UUID do usuário criado e rode no SQL Editor:
+     ```sql
+     insert into usuarios_acesso (auth_user_id, telefone, nome, papel, status, data_admissao)
+     values ('<uuid-do-usuario>', '+55SEUTELEFONE', 'Seu nome', 'admin', 'ativo', current_date);
+     ```
+
+5. **Rode local**
+
+   ```bash
+   npm run dev
+   ```
+
+   Abra `http://localhost:3000`, entre com o e-mail/senha do passo 4, e cadastre pastos, lotes, animais, máquinas, insumos e trabalhadores pelas telas do menu.
+
+6. **Confira**
+
+   ```bash
+   npm run lint
+   npm run typecheck
+   npm test           # domínio + RLS (RLS fica SKIPPED sem .env.local com Supabase real)
+   npm run test:e2e   # precisa de E2E_ADMIN_EMAIL e E2E_ADMIN_SENHA no ambiente
+   npm run gabarito   # vai dizer "não implementado" em tudo — normal na F1
+   ```
+
+7. **Deploy**
+   - **Vercel:** importe o repositório e configure as mesmas 3 variáveis de ambiente do passo 2 nas settings do projeto.
+   - **Supabase:** se usou `supabase start` local, crie o projeto remoto, rode `supabase link` e reaplique a migração (`supabase db push` ou colar o SQL no Studio).
+
+---
+
 ## Estrutura
 
 ```
@@ -38,7 +93,7 @@ README.md              ← este arquivo
 docs/
   00-indice.md         ← mapa do que está em cada documento
   01-dominio.md        ← linguagem de campo, fórmulas, parâmetros, estados, alertas
-  02-dados.md          ← DDL canônico (27 tabelas), RLS, auditoria, migração
+  02-dados.md          ← DDL canônico (27+ tabelas), RLS, auditoria, migração
   03-modulos.md        ← M1 a M11
   04-bot.md            ← prompt do extrator, few-shots, validação, custo
   05-arquitetura.md    ← stack, camadas, sincronização offline, UX, segurança
@@ -49,6 +104,21 @@ docs/
 .claude/
   settings.json        ← permissões de ferramenta
   commands/            ← comandos do projeto (abaixo)
+src/                   ← código (Fase 1 em diante)
+  domain/              ← regras puras: tipos, estados, validação — zero import de framework
+  infra/               ← supabase, offline (fila/Dexie), importador de CSV
+  app/                 ← rotas Next (App Router) — login + telas de cadastro + API routes
+  components/          ← ui/ (shadcn) + componentes que falam com infra
+supabase/
+  migrations/          ← DDL + RLS + auditoria, idempotente
+  seed.sql             ← parametros_fazenda + vacinas_catalogo (sem dado desta fazenda)
+  config.toml          ← config do `supabase start` local
+tests/
+  e2e/                 ← Playwright (login, cadastro, offline)
+  integration/         ← rls.spec.ts — o teste obrigatório do §14
+  fixtures/            ← planilha-exemplo.csv do importador
+scripts/
+  gabarito.ts          ← roda o Anexo A contra src/domain/calculos/
 ```
 
 **Por que a spec está fatiada:** o Claude Code carrega `CLAUDE.md` em toda sessão. Se a especificação inteira estivesse lá, você queimaria contexto a cada turno. Assim, o `CLAUDE.md` fica com as regras invioláveis e o mapa; os detalhes são lidos só quando a tarefa exige.

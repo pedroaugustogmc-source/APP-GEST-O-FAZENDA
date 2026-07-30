@@ -1,0 +1,35 @@
+{
+  "root": true,
+  "extends": ["next/core-web-vitals", "plugin:@typescript-eslint/recommended"],
+  "parser": "@typescript-eslint/parser",
+  "plugins": ["@typescript-eslint", "boundaries"],
+  "settings": {
+    "boundaries/include": ["src/**/*"],
+    "boundaries/ignore": ["src/lib/**", "src/middleware.ts"],
+    "boundaries/elements": [
+      { "type": "domain", "pattern": "src/domain/**" },
+      { "type": "infra", "pattern": "src/infra/**" },
+      { "type": "workers", "pattern": "src/workers/**" },
+      { "type": "components", "pattern": "src/components/**" },
+      { "type": "app", "pattern": "src/app/**" }
+    ]
+  },
+  "rules": {
+    "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
+    "@typescript-eslint/no-explicit-any": "error",
+    "boundaries/no-unknown": "error",
+    "boundaries/element-types": [
+      "error",
+      {
+        "default": "disallow",
+        "rules": [
+          { "from": "domain", "allow": [] },
+          { "from": "infra", "allow": ["domain"] },
+          { "from": "components", "allow": ["domain", "infra"] },
+          { "from": "workers", "allow": ["domain", "infra"] },
+          { "from": "app", "allow": ["domain", "infra", "components", "workers"] }
+        ]
+      }
+    ]
+  }
+}

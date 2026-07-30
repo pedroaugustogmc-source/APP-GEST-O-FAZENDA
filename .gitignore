@@ -1,0 +1,29 @@
+# dependências
+node_modules/
+
+# build
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+
+# testes
+coverage/
+playwright-report/
+test-results/
+/blob-report/
+
+# ambiente
+.env
+.env.local
+.env.*.local
+
+# supabase local
+supabase/.branches/
+supabase/.temp/
+
+# sistema
+.DS_Store
+*.pem
+npm-debug.log*
