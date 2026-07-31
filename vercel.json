@@ -3,6 +3,14 @@
     {
       "path": "/api/workers/processar-mensagens-pendentes",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/workers/atualizar-indicadores",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/workers/gerar-alertas",
+      "schedule": "0 * * * *"
     }
   ]
 }

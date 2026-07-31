@@ -11,7 +11,7 @@ import type { MensagemRecebida } from "../../../src/infra/messaging/tipos.ts";
 import { criarTranscritorGroq } from "../../../src/infra/asr/groq.ts";
 import { extrairEventos, MODELO_PADRAO, type EntradaExtrator } from "../../../src/infra/claude/extrair.ts";
 import { calcularCustoMensagemCentavos } from "../../../src/infra/custoBot.ts";
-import type { ISODate } from "../../../src/domain/tipos/index.ts";
+import { hojeEmFortaleza } from "../../../src/domain/tipos/data.ts";
 
 import { buscarContextoExtrator, buscarParametros } from "./contexto.ts";
 import { passarPeloPorteiro, excedeuLimiteDeTaxa } from "./porteiro.ts";
@@ -251,18 +251,6 @@ async function marcarModoDegradado(mensagemId: string, erro: unknown): Promise<v
     .from("mensagens_bot")
     .update({ erro: mensagemErro, tentativas: (atual?.tentativas ?? 0) + 1 })
     .eq("id", mensagemId);
-}
-
-// docs/01-dominio.md §4: fuso America/Fortaleza — "hoje" nunca é o UTC cru
-// (à noite em Fortaleza, UTC já virou o dia seguinte).
-function hojeEmFortaleza(): ISODate {
-  const formatter = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Fortaleza",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
-  return formatter.format(new Date()) as ISODate;
 }
 
 function base64DeBytes(bytes: Uint8Array): string {

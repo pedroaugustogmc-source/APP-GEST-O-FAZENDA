@@ -24,3 +24,17 @@ export function partesDeISODate(data: ISODate): PartesData {
 
   return { ano, mes, dia };
 }
+
+// docs/01-dominio.md §4: fuso America/Fortaleza — "hoje" nunca é o UTC cru (à
+// noite em Fortaleza, UTC já virou o dia seguinte). Usado tanto pela Edge
+// Function (Deno) quanto pelo Next.js (Node) — Intl.DateTimeFormat é padrão
+// nos dois runtimes, sem precisar de framework.
+export function hojeEmFortaleza(): ISODate {
+  const formatador = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Fortaleza",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  return formatador.format(new Date()) as ISODate;
+}
