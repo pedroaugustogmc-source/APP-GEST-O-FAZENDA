@@ -6,12 +6,18 @@ import { avaliarLotacao } from "@/domain/calculos/avaliarLotacao";
 import { diasDeDescanso } from "@/domain/calculos/diasDeDescanso";
 import { gmd } from "@/domain/calculos/gmd";
 import { elegiveisParaVacina, type AnimalParaVacina, type RegraVacinal } from "@/domain/calculos/elegiveisParaVacina";
+import { arrobasCarcaca } from "@/domain/calculos/arrobasCarcaca";
+import { pontoEquilibrio } from "@/domain/calculos/pontoEquilibrio";
+import { distanciaBreakeven } from "@/domain/calculos/distanciaBreakeven";
+import { CATEGORIA_PARA_TIPO_PRECO, buscarPrecosMaisRecentes } from "@/infra/supabase/precoMercado";
 import { hojeEmFortaleza } from "@/domain/tipos/data";
 import type { Parametros, ISODate } from "@/domain/tipos";
 
-// docs/01-dominio.md §12 — catálogo de alertas. Cobre os 9 tipos que já têm
-// dado sem depender de financeiro/M7/M8 (F4/F5) — decisão registrada em
-// ESTADO.md. Job diário (cron); dedup/auto-resolução em src/infra/alertas.ts.
+// docs/01-dominio.md §12 — catálogo de alertas. Cobre 10 dos 16 tipos: os 9
+// que já tinham dado sem financeiro (F3) + custo_acima_breakeven, que só
+// ficou possível agora que financeiro/custoPorArroba/pontoEquilibrio
+// existem (F4). Os que faltam dependem de M7/M8 (F5). Job diário (cron);
+// dedup/auto-resolução em src/infra/alertas.ts.
 export async function GET(request: Request) {
   const segredoConfigurado = process.env.CRON_SECRET;
   const segredoRecebido = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
@@ -30,6 +36,7 @@ export async function GET(request: Request) {
   resultado.gmd_e_dado_velho = await gerarAlertasDeRecria(supabase, parametros, hoje);
   resultado.mortalidade = await gerarAlertaDeMortalidade(supabase, hoje);
   resultado.sincronizacao = await gerarAlertaDeSincronizacao(supabase, parametros, hoje);
+  resultado.custo_acima_breakeven = await gerarAlertaDeCustoAcimaBreakeven(supabase, parametros);
 
   return NextResponse.json({ gerado_em: new Date().toISOString(), alertas_avaliados: resultado });
 }
@@ -288,6 +295,49 @@ async function gerarAlertaDeSincronizacao(supabase: Supa, parametros: Parametros
   }
 
   await sincronizarAlertas(supabase, "sincronizacao_parada", "usuarios_acesso", ofensores);
+  return ofensores.length;
+}
+
+async function gerarAlertaDeCustoAcimaBreakeven(supabase: Supa, parametros: Parametros): Promise<number> {
+  const [{ data: lotesRecria }, { data: financeiroData }, precoMaisRecentePorTipo] = await Promise.all([
+    supabase.from("mv_indicadores_recria").select("*").eq("tipo_operacao", "recria"),
+    supabase.from("financeiro").select("lote_id, valor_centavos").eq("tipo", "custo").is("deletado_em", null).not("lote_id", "is", null),
+    buscarPrecosMaisRecentes(supabase),
+  ]);
+
+  const custoPorLote = new Map<string, bigint>();
+  for (const linha of (financeiroData ?? []) as Array<{ lote_id: string; valor_centavos: number }>) {
+    custoPorLote.set(linha.lote_id, (custoPorLote.get(linha.lote_id) ?? 0n) + BigInt(linha.valor_centavos));
+  }
+
+  const ofensores: OfensorAlerta[] = [];
+
+  type LinhaRecria = { lote_id: string; lote_nome: string; lote_categoria: string; cabecas_atuais: number; peso_ultima_kg: number | null };
+  for (const lote of (lotesRecria ?? []) as LinhaRecria[]) {
+    const custoAcumulado = custoPorLote.get(lote.lote_id);
+    if (!custoAcumulado || lote.peso_ultima_kg === null || !lote.cabecas_atuais) continue;
+
+    const tipoPreco = CATEGORIA_PARA_TIPO_PRECO[lote.lote_categoria as keyof typeof CATEGORIA_PARA_TIPO_PRECO];
+    const precoMercado = tipoPreco ? precoMaisRecentePorTipo.get(tipoPreco)?.valorCentavos : undefined;
+    if (!precoMercado) continue; // sem preço de mercado registrado, não dá pra avaliar — não inventa
+
+    const arrobasTotais = arrobasCarcaca(lote.peso_ultima_kg, parametros) * lote.cabecas_atuais;
+    const pe = pontoEquilibrio(custoAcumulado, arrobasTotais);
+    if (pe.valor === null) continue;
+
+    const distancia = distanciaBreakeven(precoMercado, pe.valor);
+    if (distancia < 0) {
+      ofensores.push({
+        entidadeId: lote.lote_id,
+        severidade: "critico",
+        titulo: "Lote abaixo do ponto de equilíbrio",
+        mensagem: `${lote.lote_nome}: ponto de equilíbrio em R$ ${(Number(pe.valor) / 100).toFixed(2)}/@, preço de mercado em R$ ${(Number(precoMercado) / 100).toFixed(2)}/@ (${(distancia * 100).toFixed(1)}%).`,
+        acaoSugerida: "Revisar custo do lote antes de decidir vender.",
+      });
+    }
+  }
+
+  await sincronizarAlertas(supabase, "custo_acima_breakeven", "lotes", ofensores);
   return ofensores.length;
 }
 

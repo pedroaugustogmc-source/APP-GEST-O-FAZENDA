@@ -4,19 +4,25 @@ import { buscarParametros } from "@/infra/supabase/parametros";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { avaliarLotacao } from "@/domain/calculos/avaliarLotacao";
-import { hojeEmFortaleza } from "@/domain/tipos/data";
+import { distanciaBreakeven } from "@/domain/calculos/distanciaBreakeven";
+import { hojeEmFortaleza, partesDeISODate } from "@/domain/tipos/data";
+import { buscarIndicadoresFinanceirosFazenda } from "@/infra/supabase/indicadoresFinanceirosFazenda";
+import { buscarPrecosMaisRecentes } from "@/infra/supabase/precoMercado";
+import { formatarCentavos } from "@/lib/dinheiro";
+import type { Centavos, ISODate } from "@/domain/tipos";
 
 export const dynamic = "force-dynamic";
 
 // docs/03-modulos.md M10 — "uma tela, no celular, que responde em 10
 // segundos: como está a fazenda hoje?". Regra de ouro: nenhum número aparece
-// sem data e sem origem; o que ainda não tem fórmula (custo/@, ponto de
-// equilíbrio, margem, caixa — todos dependem de `financeiro`, F4) aparece
-// como "— sem dado —", nunca um número inventado (CLAUDE.md regra 2).
+// sem data e sem origem; custo/@, ponto de equilíbrio, margem e caixa vêm de
+// `financeiro` (F4) — continuam "— sem dado —" honesto quando a fazenda
+// ainda não tem lançamento suficiente, nunca um número inventado (regra 2).
 export default async function PaginaInicial() {
   const supabase = criarClienteServidor();
   const hoje = hojeEmFortaleza();
   const parametros = await buscarParametros(supabase);
+  const inicioMes = primeiroDiaDoMes(hoje);
 
   const [
     { data: lotesData },
@@ -24,6 +30,9 @@ export default async function PaginaInicial() {
     { data: alertasAbertos },
     { data: mensagensRecentes },
     { count: filaRevisaoCount },
+    indicadoresFinanceiros,
+    precoMaisRecentePorTipo,
+    { data: financeiroMesData },
   ] = await Promise.all([
     supabase.from("lotes").select("cabecas_atuais").eq("status", "ativo"),
     supabase.from("mv_lotacao_por_pasto").select("*"),
@@ -38,7 +47,22 @@ export default async function PaginaInicial() {
       .limit(10),
     supabase.from("mensagens_bot").select("id, transcricao, status, recebido_em").order("recebido_em", { ascending: false }).limit(5),
     supabase.from("mensagens_bot").select("id", { count: "exact", head: true }).in("status", ["revisao", "erro"]),
+    buscarIndicadoresFinanceirosFazenda(supabase, parametros),
+    buscarPrecosMaisRecentes(supabase),
+    supabase.from("financeiro").select("tipo, valor_centavos").is("deletado_em", null).gte("data", inicioMes).lte("data", hoje),
   ]);
+
+  const precoBoi = precoMaisRecentePorTipo.get("arroba_boi") ?? null;
+  const distanciaMercado =
+    precoBoi && indicadoresFinanceiros.pontoEquilibrio.valor !== null && indicadoresFinanceiros.pontoEquilibrio.valor > 0n
+      ? distanciaBreakeven(precoBoi.valorCentavos, indicadoresFinanceiros.pontoEquilibrio.valor)
+      : null;
+
+  let caixaMes: Centavos = 0n;
+  for (const linha of (financeiroMesData ?? []) as Array<{ tipo: "custo" | "receita"; valor_centavos: number }>) {
+    caixaMes += linha.tipo === "receita" ? BigInt(linha.valor_centavos) : -BigInt(linha.valor_centavos);
+  }
+  const temLancamentoNoMes = (financeiroMesData ?? []).length > 0;
 
   const cabecasTotais = ((lotesData ?? []) as Array<{ cabecas_atuais: number }>).reduce((t, l) => t + l.cabecas_atuais, 0);
 
@@ -83,11 +107,36 @@ export default async function PaginaInicial() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <NumeroGrande titulo="Custo por @" valor="— sem dado —" nota="depende do financeiro (Fase 4)" />
-        <NumeroGrande titulo="Ponto de equilíbrio vs mercado" valor="— sem dado —" nota="depende do financeiro (Fase 4)" />
-        <NumeroGrande titulo="Margem projetada" valor="— sem dado —" nota="depende do financeiro (Fase 4)" />
+        <NumeroGrande
+          titulo="Custo por @"
+          valor={indicadoresFinanceiros.custoPorArroba.valor !== null ? `${formatarCentavos(indicadoresFinanceiros.custoPorArroba.valor)}/@` : "— sem dado —"}
+          nota={indicadoresFinanceiros.custoPorArroba.motivo ?? `atualizado ${hoje}`}
+        />
+        <NumeroGrande
+          titulo="Ponto de equilíbrio vs mercado"
+          valor={distanciaMercado !== null ? `${distanciaMercado >= 0 ? "+" : ""}${(distanciaMercado * 100).toFixed(1)}%` : "— sem dado —"}
+          nota={
+            distanciaMercado !== null
+              ? `PE ${formatarCentavos(indicadoresFinanceiros.pontoEquilibrio.valor)}/@ · mercado ${formatarCentavos(precoBoi!.valorCentavos)}/@`
+              : indicadoresFinanceiros.pontoEquilibrio.valor !== null
+                ? "sem preço de mercado da arroba do boi para comparar"
+                : (indicadoresFinanceiros.pontoEquilibrio.motivo ?? "sem dado")
+          }
+          inverso={distanciaMercado !== null && distanciaMercado < 0}
+        />
+        <NumeroGrande
+          titulo="Margem projetada"
+          valor={indicadoresFinanceiros.margemProjetada !== null ? formatarCentavos(indicadoresFinanceiros.margemProjetada) : "— sem dado —"}
+          nota={indicadoresFinanceiros.margemProjetada !== null ? `sobre ${indicadoresFinanceiros.arrobasTotal.toFixed(1)} arroba(s) hoje` : "sem preço de mercado para nenhuma categoria de lote"}
+          inverso={indicadoresFinanceiros.margemProjetada !== null && indicadoresFinanceiros.margemProjetada < 0n}
+        />
         <NumeroGrande titulo="Cabeças totais" valor={cabecasTotais.toLocaleString("pt-BR")} nota={`atualizado ${hoje}`} destaque />
-        <NumeroGrande titulo="Caixa do mês" valor="— sem dado —" nota="depende do financeiro (Fase 4)" />
+        <NumeroGrande
+          titulo="Caixa do mês"
+          valor={temLancamentoNoMes ? formatarCentavos(caixaMes) : "— sem dado —"}
+          nota={temLancamentoNoMes ? `receita − custo desde ${inicioMes}` : "nenhum lançamento neste mês"}
+          inverso={temLancamentoNoMes && caixaMes < 0n}
+        />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -163,11 +212,13 @@ function NumeroGrande({
   valor,
   nota,
   destaque,
+  inverso,
 }: {
   titulo: string;
   valor: string;
   nota: string;
   destaque?: boolean;
+  inverso?: boolean;
 }) {
   return (
     <Card>
@@ -175,11 +226,16 @@ function NumeroGrande({
         <CardTitle className="text-sm font-medium text-muted-foreground">{titulo}</CardTitle>
       </CardHeader>
       <CardContent>
-        <p className={`text-numero-grande ${destaque ? "text-primary" : "text-muted-foreground"}`}>{valor}</p>
+        <p className={`text-numero-grande ${destaque ? "text-primary" : inverso ? "text-critico" : "text-foreground"}`}>{valor}</p>
         <p className="text-xs text-muted-foreground">{nota}</p>
       </CardContent>
     </Card>
   );
+}
+
+function primeiroDiaDoMes(hoje: ISODate): ISODate {
+  const partes = partesDeISODate(hoje);
+  return `${partes.ano}-${String(partes.mes).padStart(2, "0")}-01`;
 }
 
 function LinhaPendencia({

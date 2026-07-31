@@ -115,7 +115,7 @@ async function linhaCustoEfetivoCotacaoA(): Promise<string> {
   const mod = await importarSeExistir("custoEfetivoCotacao");
   if (!mod) throw new Error("não implementado");
   const { custoEfetivoCotacao } = mod as unknown as ModCustoEfetivoCotacao;
-  const r = custoEfetivoCotacao(1_350_000n, 0, 7, { TAXA_OPORTUNIDADE_MES: 0.015 });
+  const r = custoEfetivoCotacao(1_350_000n, 0, 0.07, { TAXA_OPORTUNIDADE_MES: 0.015 });
   return `R$ ${formatar(Number(r) / 100, 2)}`;
 }
 

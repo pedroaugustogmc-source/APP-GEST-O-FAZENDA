@@ -21,6 +21,16 @@ export type TipoMaquinaDB = "trator" | "implemento" | "veiculo" | "bomba" | "ger
 export type PapelUsuarioDB = "admin" | "gerente" | "trabalhador";
 export type StatusUsuarioDB = "ativo" | "inativo";
 export type PlataformaBotDB = "telegram" | "whatsapp";
+export type TipoFinanceiroDB = "custo" | "receita";
+export type CentroCustoDB = "cria" | "recria" | "leite" | "estrutura" | "administrativo";
+export type TipoPrecoMercadoDB =
+  | "arroba_boi"
+  | "arroba_vaca"
+  | "bezerro"
+  | "bezerra"
+  | "garrote"
+  | "novilha"
+  | "leite_litro";
 
 export interface PastoRow {
   id: string;
@@ -165,4 +175,42 @@ export interface MensagemBotRow {
   processado_em: string | null;
   revisado_por: string | null;
   revisado_em: string | null;
+}
+
+export interface FinanceiroRow {
+  id: string;
+  data: string;
+  tipo: TipoFinanceiroDB;
+  categoria: string;
+  subcategoria: string | null;
+  descricao: string | null;
+  valor_centavos: number;
+  lote_id: string | null;
+  centro_custo: CentroCustoDB;
+  maquina_id: string | null;
+  fornecedor: string | null;
+  forma_pagamento: string | null;
+  prazo_dias: number;
+  vencimento: string | null;
+  pago: boolean;
+  nota_fiscal: string | null;
+  mensagem_id: string | null;
+  client_uuid: string | null;
+  registrado_por: string;
+  registrado_em: string;
+  deletado_em: string | null;
+  estorna_id: string | null;
+}
+
+export interface PrecoMercadoRow {
+  id: string;
+  tipo: TipoPrecoMercadoDB;
+  valor_centavos: number;
+  unidade: string;
+  praca: string;
+  fonte: string;
+  data_referencia: string;
+  registrado_por: string | null;
+  registrado_em: string;
+  client_uuid: string | null;
 }

@@ -12,6 +12,8 @@ export const TABELAS_SINCRONIZAVEIS = [
   "usuarios_acesso",
   "parametros_fazenda",
   "propriedade",
+  "financeiro",
+  "precos_mercado",
 ] as const;
 
 export type TabelaSincronizavel = (typeof TABELAS_SINCRONIZAVEIS)[number];

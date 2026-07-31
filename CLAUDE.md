@@ -100,7 +100,7 @@ npm run gabarito       # roda a fixture do Anexo A e compara com o esperado
 | F1 | DDL + RLS + seed de parâmetros e vacinas + auth admin + shell PWA + importador de planilha | ✅ |
 | F2 | Bot + transcrição + extração + validação + fila offline + fila de revisão + RBAC | ✅ |
 | F3 | Mapa de pastos + rebanho cria/recria + calendário sanitário + dashboard | ✅ |
-| F4 | Financeiro + custo/@ + DRE por lote + ponto de equilíbrio + cenários + mercado | ⬜ |
+| F4 | Financeiro + custo/@ + DRE por lote + ponto de equilíbrio + cenários + mercado | ✅ |
 | F5 | Máquinas + checklist + cotações + priorização semanal + Calendar + relatórios | ⬜ |
 | F6 | WhatsApp Business API + exportação/PDF + compliance + multi-fazenda | ⬜ |
 
