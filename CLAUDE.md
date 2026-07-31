@@ -52,7 +52,7 @@ Se uma decisão sua não serve a uma dessas três, é acessório — entra depoi
 8. **Offline é o estado normal.** Nunca bloquear a UI por falta de internet.
 9. **Data do fato ≠ data do registro.** Relatório usa `data_do_fato`, sempre.
 10. **Conteúdo veterinário é organizacional, não prescritivo.** Disclaimer obrigatório, aftosa bloqueada (MA é zona livre sem vacinação desde abr/2024).
-11. **Uma fase por vez.** Termina, para, espera validação. Não emenda a próxima.
+11. **Uma fase por vez, entregue inteira e testada — mas emende a próxima automaticamente ao terminar.** Decisão do dono (sessão de 2026-07-31, ver `ESTADO.md`): não espere um comando explícito entre fases. Continue direto para a fase seguinte da tabela, seguindo o mesmo formato obrigatório (plan mode, testes, auto-verificação, `ESTADO.md`) em cada uma. O que não muda: nunca misturar código de duas fases numa mesma entrega, e parar de verdade se faltar uma decisão que só o dono pode tomar.
 12. **Português de campo em toda a UI e em todo texto do bot.** Nada de "record", "submit", "entity".
 
 ---

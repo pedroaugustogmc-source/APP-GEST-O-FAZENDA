@@ -34,4 +34,4 @@ Executar a **Fase $1** do projeto.
 - Atualize `ESTADO.md` (fase, decisões, suposições, pendências, log da sessão).
 - Marque a fase como ✅ na tabela do `CLAUDE.md`.
 - Rode a auto-verificação e declare `Auto-verificação: N/12 conformes`.
-- **PARE.** Não comece a fase seguinte.
+- Decisão do dono (ver `CLAUDE.md` regra 11): emende direto para a fase seguinte, sem esperar um novo comando — mas repita todo este processo (plan mode, formato de entrega, testes, auto-verificação) para ela. Só pare de verdade se faltar uma decisão que só o dono pode tomar.

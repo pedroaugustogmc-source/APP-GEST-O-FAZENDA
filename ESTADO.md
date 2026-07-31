@@ -4,7 +4,7 @@
 
 ## Fase atual
 
-F2 — concluída. Aguardando validação do dono antes de `/fase 3`.
+F3 — em andamento. **Processo mudou:** o dono pediu explicitamente ("QUANDO VOCE ACABAR, UMA FASE, JÁ PODE IR DIRETO PRA OUTRA") para não esperar mais um comando entre fases — ao terminar uma, já entro na próxima da tabela, seguindo o mesmo formato obrigatório em cada uma (plan mode, testes, auto-verificação, atualizar este arquivo). Regra 11 do `CLAUDE.md` e o fim de `.claude/commands/fase.md` foram atualizados para refletir isso. O que continua valendo: nunca misturar código de duas fases na mesma entrega, e parar de verdade quando faltar uma decisão que só o dono pode tomar.
 
 ## Decisões tomadas
 
