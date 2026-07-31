@@ -3,7 +3,7 @@ import { buscarParametros } from "@/infra/supabase/parametros";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { hojeEmFortaleza } from "@/domain/tipos/data";
-import { buscarIndicadoresCria, buscarIndicadoresRecria } from "./consultas";
+import { buscarIndicadoresCria, buscarIndicadoresRecria } from "@/infra/supabase/indicadoresRebanho";
 import type { Indicador } from "@/domain/tipos";
 
 export const dynamic = "force-dynamic";

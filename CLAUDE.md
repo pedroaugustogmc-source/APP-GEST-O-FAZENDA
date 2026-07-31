@@ -101,7 +101,7 @@ npm run gabarito       # roda a fixture do Anexo A e compara com o esperado
 | F2 | Bot + transcrição + extração + validação + fila offline + fila de revisão + RBAC | ✅ |
 | F3 | Mapa de pastos + rebanho cria/recria + calendário sanitário + dashboard | ✅ |
 | F4 | Financeiro + custo/@ + DRE por lote + ponto de equilíbrio + cenários + mercado | ✅ |
-| F5 | Máquinas + checklist + cotações + priorização semanal + Calendar + relatórios | ⬜ |
+| F5 | Máquinas + checklist + cotações + priorização semanal + Calendar + relatórios | ✅ |
 | F6 | WhatsApp Business API + exportação/PDF + compliance + multi-fazenda | ⬜ |
 
 Atualize esta tabela e `ESTADO.md` ao concluir cada fase.

@@ -10,13 +10,17 @@ import { arrobasCarcaca } from "@/domain/calculos/arrobasCarcaca";
 import { pontoEquilibrio } from "@/domain/calculos/pontoEquilibrio";
 import { distanciaBreakeven } from "@/domain/calculos/distanciaBreakeven";
 import { CATEGORIA_PARA_TIPO_PRECO, buscarPrecosMaisRecentes } from "@/infra/supabase/precoMercado";
+import { avaliarManutencao } from "@/domain/calculos/avaliarManutencao";
 import { hojeEmFortaleza } from "@/domain/tipos/data";
 import type { Parametros, ISODate } from "@/domain/tipos";
 
-// docs/01-dominio.md §12 — catálogo de alertas. Cobre 10 dos 16 tipos: os 9
-// que já tinham dado sem financeiro (F3) + custo_acima_breakeven, que só
-// ficou possível agora que financeiro/custoPorArroba/pontoEquilibrio
-// existem (F4). Os que faltam dependem de M7/M8 (F5). Job diário (cron);
+// docs/01-dominio.md §12 — catálogo de alertas. Cobre 14 dos 17 tipos: os 9
+// que já tinham dado sem financeiro (F3) + custo_acima_breakeven (F4) +
+// manutencao_vencida/manutencao_proxima/estoque_minimo/insumo_vencendo
+// (F5, M7/M8). Faltam vacina_conflito, vacina_proibida (já bloqueada de
+// fato pela validação semântica da F2, só não vira linha em `alertas`) e
+// mensagem_em_revisao (a fila de revisão já mostra a contagem direto,
+// F2) — fora do escopo declarado em ESTADO.md. Job diário (cron);
 // dedup/auto-resolução em src/infra/alertas.ts.
 export async function GET(request: Request) {
   const segredoConfigurado = process.env.CRON_SECRET;
@@ -37,6 +41,8 @@ export async function GET(request: Request) {
   resultado.mortalidade = await gerarAlertaDeMortalidade(supabase, hoje);
   resultado.sincronizacao = await gerarAlertaDeSincronizacao(supabase, parametros, hoje);
   resultado.custo_acima_breakeven = await gerarAlertaDeCustoAcimaBreakeven(supabase, parametros);
+  resultado.manutencao = await gerarAlertasDeManutencao(supabase, parametros);
+  resultado.insumos = await gerarAlertasDeInsumo(supabase, parametros, hoje);
 
   return NextResponse.json({ gerado_em: new Date().toISOString(), alertas_avaliados: resultado });
 }
@@ -339,6 +345,91 @@ async function gerarAlertaDeCustoAcimaBreakeven(supabase: Supa, parametros: Para
 
   await sincronizarAlertas(supabase, "custo_acima_breakeven", "lotes", ofensores);
   return ofensores.length;
+}
+
+// docs/01-dominio.md §12: manutencao_vencida (horas desde a última troca >
+// intervalo) / manutencao_proxima (faltam < ALERTA_MANUTENCAO_HORAS). Só
+// avalia máquina com uma manutenção registrada com `proxima_em_horas` —
+// sem isso não há base pra afirmar urgência nenhuma (CLAUDE.md regra 2),
+// mesmo raciocínio de avaliarManutencao(..., null, ...) → "ok".
+async function gerarAlertasDeManutencao(supabase: Supa, parametros: Parametros): Promise<number> {
+  const [{ data: maquinasData }, { data: manutencoesData }] = await Promise.all([
+    supabase.from("maquinas").select("id, nome, horas_uso_total").neq("status", "vendida"),
+    supabase.from("manutencoes").select("maquina_id, proxima_em_horas, data").not("proxima_em_horas", "is", null).order("data", { ascending: false }),
+  ]);
+
+  const proximaPorMaquina = new Map<string, number>();
+  for (const linha of (manutencoesData ?? []) as Array<{ maquina_id: string; proxima_em_horas: number }>) {
+    if (!proximaPorMaquina.has(linha.maquina_id)) proximaPorMaquina.set(linha.maquina_id, linha.proxima_em_horas);
+  }
+
+  const alertaAntecedencia = parametros.ALERTA_MANUTENCAO_HORAS ?? 20;
+  const ofensoresVencida: OfensorAlerta[] = [];
+  const ofensoresProxima: OfensorAlerta[] = [];
+
+  for (const maquina of (maquinasData ?? []) as Array<{ id: string; nome: string; horas_uso_total: number }>) {
+    const proximaEmHoras = proximaPorMaquina.get(maquina.id) ?? null;
+    const avaliacao = avaliarManutencao(maquina.horas_uso_total, proximaEmHoras, alertaAntecedencia);
+
+    if (avaliacao.status === "vencida") {
+      ofensoresVencida.push({
+        entidadeId: maquina.id,
+        severidade: "critico",
+        titulo: "Manutenção vencida",
+        mensagem: `${maquina.nome}: ${Math.abs(avaliacao.horasRestantes!).toFixed(1)} hora(s) além do previsto para a próxima manutenção.`,
+        acaoSugerida: "Agendar manutenção antes do próximo uso.",
+      });
+    } else if (avaliacao.status === "proxima") {
+      ofensoresProxima.push({
+        entidadeId: maquina.id,
+        severidade: "info",
+        titulo: "Manutenção se aproximando",
+        mensagem: `${maquina.nome}: faltam ${avaliacao.horasRestantes!.toFixed(1)} hora(s) para a próxima manutenção prevista.`,
+        acaoSugerida: "Agendar antes do próximo uso pesado.",
+      });
+    }
+  }
+
+  await sincronizarAlertas(supabase, "manutencao_vencida", "maquinas", ofensoresVencida);
+  await sincronizarAlertas(supabase, "manutencao_proxima", "maquinas", ofensoresProxima);
+  return ofensoresVencida.length + ofensoresProxima.length;
+}
+
+// docs/01-dominio.md §12: estoque_minimo (quantidade < mínimo) /
+// insumo_vencendo (validade dentro de DIAS_INSUMO_VENCENDO).
+async function gerarAlertasDeInsumo(supabase: Supa, parametros: Parametros, hoje: ISODate): Promise<number> {
+  const { data } = await supabase.from("estoque_insumos").select("id, insumo, quantidade, minimo_alerta, validade");
+  const linhas = (data ?? []) as Array<{ id: string; insumo: string; quantidade: number; minimo_alerta: number; validade: ISODate | null }>;
+
+  const diasVencendo = parametros.DIAS_INSUMO_VENCENDO ?? 30;
+  const ofensoresEstoque: OfensorAlerta[] = [];
+  const ofensoresValidade: OfensorAlerta[] = [];
+
+  for (const linha of linhas) {
+    if (linha.quantidade < linha.minimo_alerta) {
+      ofensoresEstoque.push({
+        entidadeId: linha.id,
+        severidade: "atencao",
+        titulo: "Estoque abaixo do mínimo",
+        mensagem: `${linha.insumo}: ${linha.quantidade} em estoque, abaixo do mínimo de ${linha.minimo_alerta}.`,
+        acaoSugerida: "Abrir cotação com fornecedores.",
+      });
+    }
+
+    if (linha.validade && diferencaDias(hoje, linha.validade) <= diasVencendo) {
+      ofensoresValidade.push({
+        entidadeId: linha.id,
+        severidade: "atencao",
+        titulo: "Insumo perto de vencer",
+        mensagem: `${linha.insumo}: validade em ${linha.validade}${diferencaDias(hoje, linha.validade) < 0 ? " (já vencido)" : ""}.`,
+        acaoSugerida: "Priorizar consumo.",
+      });
+    }
+  }
+
+  await sincronizarAlertas(supabase, "estoque_minimo", "estoque_insumos", ofensoresEstoque);
+  await sincronizarAlertas(supabase, "insumo_vencendo", "estoque_insumos", ofensoresValidade);
+  return ofensoresEstoque.length + ofensoresValidade.length;
 }
 
 function diferencaDias(a: ISODate, b: ISODate): number {

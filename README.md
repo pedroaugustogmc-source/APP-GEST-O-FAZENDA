@@ -152,6 +152,50 @@ Você deve ver `CLAUDE.md` na lista. Se não aparecer, você não está na pasta
 
 ---
 
+## Fase 5 — Rotina: passo a passo
+
+> **Mesma nota da Fase 2:** `.env.example` continua bloqueado neste ambiente. Variáveis novas abaixo vão no seu `.env.local`.
+
+1. **Google Calendar é opcional** — sem as 4 variáveis abaixo configuradas, o worker `/api/workers/rotina-semanal` continua rodando normalmente (prioriza tarefas, gera e envia o relatório semanal), só pula a sincronização com o Calendar silenciosamente. Pra ativar:
+   - Crie um projeto no [Google Cloud Console](https://console.cloud.google.com), ative a **Google Calendar API**, crie uma credencial OAuth 2.0 (tipo "Aplicativo de desktop" é o mais simples para uso de 1 calendário/1 dono).
+   - Gere um refresh token uma vez via [OAuth 2.0 Playground](https://developers.google.com/oauthplayground) (escopo `https://www.googleapis.com/auth/calendar.events`) — não precisa implementar o fluxo de consentimento web completo pra este uso.
+   - Pegue o ID do calendário (Configurações do Google Calendar → "Integrar agenda" → ID da agenda; use `primary` para o calendário principal da conta).
+
+2. **Acrescente ao `.env.local`**
+
+   ```bash
+   GOOGLE_CALENDAR_CLIENT_ID=
+   GOOGLE_CALENDAR_CLIENT_SECRET=
+   GOOGLE_CALENDAR_REFRESH_TOKEN=
+   GOOGLE_CALENDAR_ID=            # ou "primary"
+   ```
+
+3. **Aplique a migração da Fase 5**
+
+   ```bash
+   npm run db:reset
+   ```
+
+   Isso roda `supabase/migrations/20260803120000_fase5_rotina.sql` (tabela `checklist_itens`, `tarefas.calendar_event_id`, `client_uuid` em `plano_manutencao`/`manutencoes`, parâmetros `DIAS_INSUMO_VENCENDO`/`LIMITE_TAREFAS_CALENDAR`).
+
+4. **Teste de ponta a ponta**
+   - Cadastre uma máquina, um item de plano de manutenção e registre uma manutenção com "próxima em X horas" preenchido em `/maquinas` — confira que o card mostra o semáforo certo.
+   - Crie um item de checklist com `proxima_execucao` de hoje em `/checklist`.
+   - Dispare `/api/workers/rotina-semanal` manualmente (`curl -H "Authorization: Bearer $CRON_SECRET" https://<seu-deploy>/api/workers/rotina-semanal`) e confira que apareceu uma tarefa em `/tarefas` e um relatório semanal em `/relatorios`.
+   - Compare 2+ orçamentos em `/cotacoes` e confira que o vencedor é por custo efetivo, não o de menor preço nominal.
+
+5. **Confira**
+
+   ```bash
+   npm run lint
+   npm run typecheck
+   npm test
+   npm run build
+   npm run gabarito         # continua 8/8 — nenhuma função nova de F5 está no Anexo A
+   ```
+
+---
+
 ## Estrutura
 
 ```

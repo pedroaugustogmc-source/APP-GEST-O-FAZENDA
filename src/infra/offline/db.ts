@@ -14,6 +14,9 @@ export const TABELAS_SINCRONIZAVEIS = [
   "propriedade",
   "financeiro",
   "precos_mercado",
+  "checklist_itens",
+  "plano_manutencao",
+  "manutencoes",
 ] as const;
 
 export type TabelaSincronizavel = (typeof TABELAS_SINCRONIZAVEIS)[number];

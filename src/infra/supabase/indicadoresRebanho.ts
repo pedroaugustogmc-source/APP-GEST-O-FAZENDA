@@ -10,6 +10,11 @@ import { gmd } from "@/domain/calculos/gmd";
 import { partesDeISODate } from "@/domain/tipos/data";
 import type { Indicador, ISODate, Kg, Parametros } from "@/domain/tipos";
 
+// Movido de src/app/(admin)/rebanho/consultas.ts (F3) pra cá na F5: o
+// relatório semanal/trimestral (src/infra/relatorios) também precisa
+// destas consultas, e `infra` não pode importar de `app`
+// (eslint boundaries/element-types — CLAUDE.md "app → infra → domain").
+//
 // Janela de análise do painel CRIA: últimos 12 meses. docs/03-modulos.md M3
 // não fixa uma janela — 12 meses é decisão minha, registrada em ESTADO.md,
 // por ser o ciclo natural de uma estação de monta/desmame.

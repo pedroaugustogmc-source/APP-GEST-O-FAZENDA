@@ -33,6 +33,8 @@ export default async function PaginaInicial() {
     indicadoresFinanceiros,
     precoMaisRecentePorTipo,
     { data: financeiroMesData },
+    { count: manutencaoVencidaCount },
+    { data: tarefasPrioritarias },
   ] = await Promise.all([
     supabase.from("lotes").select("cabecas_atuais").eq("status", "ativo"),
     supabase.from("mv_lotacao_por_pasto").select("*"),
@@ -50,6 +52,13 @@ export default async function PaginaInicial() {
     buscarIndicadoresFinanceirosFazenda(supabase, parametros),
     buscarPrecosMaisRecentes(supabase),
     supabase.from("financeiro").select("tipo, valor_centavos").is("deletado_em", null).gte("data", inicioMes).lte("data", hoje),
+    supabase.from("alertas").select("id", { count: "exact", head: true }).eq("tipo", "manutencao_vencida").is("resolvido_em", null),
+    supabase
+      .from("tarefas")
+      .select("id, descricao, justificativa")
+      .eq("status", "pendente")
+      .order("score_prioridade", { ascending: false, nullsFirst: false })
+      .limit(5),
   ]);
 
   const precoBoi = precoMaisRecentePorTipo.get("arroba_boi") ?? null;
@@ -149,7 +158,12 @@ export default async function PaginaInicial() {
             <LinhaPendencia label="Açudes em nível baixo" valor={acudesBaixos} href="/pastos" critico={acudesBaixos > 0} />
             <LinhaPendencia label="Vacinas na janela" valor={vacinaJanela} href="/sanidade" />
             <LinhaPendencia label="Vacinas atrasadas" valor={vacinaAtrasada} href="/sanidade" critico={vacinaAtrasada > 0} />
-            <LinhaPendencia label="Manutenção de máquina estourada" valor="— sem dado —" href="/maquinas" nota="Fase 5" />
+            <LinhaPendencia
+              label="Manutenção de máquina estourada"
+              valor={manutencaoVencidaCount ?? 0}
+              href="/maquinas"
+              critico={(manutencaoVencidaCount ?? 0) > 0}
+            />
             <LinhaPendencia label="Fila de revisão do bot" valor={filaRevisaoCount ?? 0} href="/revisao" critico={(filaRevisaoCount ?? 0) > 0} />
           </CardContent>
         </Card>
@@ -174,8 +188,21 @@ export default async function PaginaInicial() {
         <CardHeader>
           <CardTitle className="text-base">Tarefas prioritárias da semana</CardTitle>
         </CardHeader>
-        <CardContent className="text-sm text-muted-foreground">
-          — sem dado — priorização automática depende de M8 (Fase 5).
+        <CardContent className="flex flex-col gap-2 text-sm">
+          {((tarefasPrioritarias ?? []) as Array<{ id: string; descricao: string; justificativa: string | null }>).map((tarefa) => (
+            <div key={tarefa.id} className="border-b border-border pb-2 last:border-0">
+              <p className="font-medium text-foreground">{tarefa.descricao}</p>
+              {tarefa.justificativa && <p className="text-muted-foreground">{tarefa.justificativa}</p>}
+            </div>
+          ))}
+          {(!tarefasPrioritarias || tarefasPrioritarias.length === 0) && (
+            <p className="text-muted-foreground">
+              — sem dado — nenhuma tarefa pendente ainda; a rotina semanal gera a agenda automaticamente.
+            </p>
+          )}
+          <Link href="/tarefas" className="text-sm font-medium text-primary hover:underline">
+            Ver todas as tarefas →
+          </Link>
         </CardContent>
       </Card>
 

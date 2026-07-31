@@ -94,10 +94,122 @@ export interface MaquinaRow {
   modelo: string;
   ano: number | null;
   numero_serie: string | null;
+  horas_uso_total: number;
+  horimetro_ultima_leitura: number | null;
+  horimetro_lido_em: string | null;
   status: "ativa" | "parada" | "manutencao" | "vendida";
+  ficha_cuidados: Record<string, string> | null;
   observacao: string | null;
   client_uuid: string | null;
   criado_em: string;
+}
+
+export interface PlanoManutencaoRow {
+  id: string;
+  maquina_id: string;
+  item: string;
+  intervalo_horas: number | null;
+  intervalo_dias: number | null;
+  peca_referencia: string | null;
+  custo_estimado_centavos: number | null;
+  observacao: string | null;
+  client_uuid: string | null;
+}
+
+export interface ManutencaoRow {
+  id: string;
+  maquina_id: string;
+  plano_id: string | null;
+  data: string;
+  tipo: string;
+  preventiva: boolean;
+  horas_no_momento: number | null;
+  peca_trocada: string | null;
+  custo_centavos: number | null;
+  executado_por: string | null;
+  proxima_em_horas: number | null;
+  mensagem_id: string | null;
+  client_uuid: string | null;
+  registrado_por: string;
+  registrado_em: string;
+}
+
+export interface HoraMaquinaRow {
+  id: string;
+  maquina_id: string;
+  data: string;
+  horas: number;
+  atividade: string | null;
+  operador: string | null;
+  mensagem_id: string | null;
+  registrado_por: string;
+  registrado_em: string;
+}
+
+export interface CotacaoRow {
+  id: string;
+  insumo: string;
+  fornecedor: string;
+  quantidade: number | null;
+  unidade: string | null;
+  preco_centavos: number;
+  prazo_dias: number;
+  desconto_avista_pct: number;
+  frete_centavos: number;
+  custo_efetivo_centavos: number | null;
+  data: string;
+  vencedora: boolean;
+  registrado_por: string;
+  registrado_em: string;
+}
+
+export type StatusTarefaDB = "pendente" | "em_andamento" | "concluida" | "cancelada";
+export type OrigemTarefaDB = "auto" | "manual" | "bot";
+
+export interface TarefaRow {
+  id: string;
+  data: string;
+  prazo: string | null;
+  tipo: string;
+  descricao: string;
+  origem: OrigemTarefaDB;
+  prioridade: number | null;
+  score_prioridade: number | null;
+  justificativa: string | null;
+  impacto_estimado: number | null;
+  custo_estimado_centavos: number | null;
+  responsavel_id: string | null;
+  entidade_tipo: string | null;
+  entidade_id: string | null;
+  status: StatusTarefaDB;
+  concluida_em: string | null;
+  calendar_event_id: string | null;
+  registrado_por: string | null;
+  registrado_em: string;
+}
+
+export interface ChecklistItemRow {
+  id: string;
+  descricao: string;
+  categoria: string;
+  recorrencia_dias: number;
+  ultima_execucao: string | null;
+  proxima_execucao: string;
+  ativo: boolean;
+  client_uuid: string | null;
+  criado_em: string;
+}
+
+export type TipoRelatorioDB = "semanal" | "trimestral" | "sob_demanda" | "geral";
+
+export interface RelatorioRow {
+  id: string;
+  tipo: TipoRelatorioDB;
+  periodo_inicio: string;
+  periodo_fim: string;
+  conteudo_md: string;
+  indicadores: Record<string, unknown> | null;
+  gerado_em: string;
 }
 
 export interface InsumoRow {

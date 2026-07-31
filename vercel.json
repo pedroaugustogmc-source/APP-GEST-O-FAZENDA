@@ -11,6 +11,10 @@
     {
       "path": "/api/workers/gerar-alertas",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/workers/rotina-semanal",
+      "schedule": "0 9 * * 1"
     }
   ]
 }
