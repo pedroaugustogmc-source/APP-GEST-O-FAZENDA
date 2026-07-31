@@ -1,0 +1,7 @@
+{
+  "transcricao": "choveu bem ontem, uns quarenta milímetro",
+  "esperado": {
+    "quantidadeEventos": 1,
+    "eventos": [{ "tipo": "chuva", "campos": { "milimetros": 40 } }]
+  }
+}

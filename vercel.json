@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/workers/processar-mensagens-pendentes",
+      "schedule": "*/5 * * * *"
+    }
+  ]
+}

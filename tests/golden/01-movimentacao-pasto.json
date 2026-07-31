@@ -1,0 +1,7 @@
+{
+  "transcricao": "passei o lote dois pro pasto do buriti hoje de manhã, foram trinta e oito cabeça",
+  "esperado": {
+    "quantidadeEventos": 1,
+    "eventos": [{ "tipo": "movimentacao_pasto", "campos": { "cabecas": 38 } }]
+  }
+}

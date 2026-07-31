@@ -1,4 +1,7 @@
-import { ErroTransicaoInvalida } from "./erro";
+// Extensão .ts explícita (allowImportingTsExtensions): este arquivo também é
+// importado pela Edge Function Deno (supabase/functions/bot-webhook), que
+// não faz inferência de extensão como o bundler do Next.js.
+import { ErroTransicaoInvalida } from "./erro.ts";
 
 // docs/01-dominio.md §11: animal: ativo → (vendido | morto | descartado)
 export type StatusAnimal = "ativo" | "vendido" | "morto" | "descartado";

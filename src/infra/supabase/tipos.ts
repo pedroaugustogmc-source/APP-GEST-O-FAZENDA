@@ -135,3 +135,34 @@ export interface PropriedadeRow {
   inscricao_estadual: string | null;
   criado_em: string;
 }
+
+export type StatusMensagemDB =
+  | "recebida"
+  | "transcrita"
+  | "extraida"
+  | "gravada"
+  | "revisao"
+  | "erro"
+  | "descartada";
+
+export interface MensagemBotRow {
+  id: string;
+  client_uuid: string;
+  usuario_id: string | null;
+  telefone_origem: string;
+  plataforma: PlataformaBotDB;
+  tipo: "audio" | "texto" | "foto" | "documento";
+  duracao_segundos: number | null;
+  transcricao: string | null;
+  payload_extraido: Record<string, unknown> | null;
+  eventos_gerados: Record<string, unknown> | null;
+  confianca_media: number | null;
+  status: StatusMensagemDB;
+  erro: string | null;
+  tentativas: number;
+  custo_api_centavos: number;
+  recebido_em: string;
+  processado_em: string | null;
+  revisado_por: string | null;
+  revisado_em: string | null;
+}

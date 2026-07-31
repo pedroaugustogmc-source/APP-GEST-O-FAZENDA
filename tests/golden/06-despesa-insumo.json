@@ -1,0 +1,7 @@
+{
+  "transcricao": "comprei dez saco de sal a cento e vinte o saco",
+  "esperado": {
+    "quantidadeEventos": 1,
+    "eventos": [{ "tipo": "despesa", "campos": { "valor_centavos": 120000 } }]
+  }
+}

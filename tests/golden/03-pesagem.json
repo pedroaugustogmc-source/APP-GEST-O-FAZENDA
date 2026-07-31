@@ -1,0 +1,7 @@
+{
+  "transcricao": "pesei a boiada do três, deu duzentos e dezoito de média, quarenta bicho",
+  "esperado": {
+    "quantidadeEventos": 1,
+    "eventos": [{ "tipo": "pesagem", "campos": { "peso": 218, "n_animais": 40 } }]
+  }
+}

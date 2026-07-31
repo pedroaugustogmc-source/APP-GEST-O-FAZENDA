@@ -1,0 +1,10 @@
+{
+  "transcricao": "o açude do baixão tá pela metade e o gado tá bebendo muito",
+  "esperado": {
+    "quantidadeEventos": 2,
+    "eventos": [
+      { "tipo": "nivel_acude", "campos": { "nivel_acude": 50 } },
+      { "tipo": "observacao", "campos": {} }
+    ]
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "transcricao": "tirei cento e dez litro de leite hoje cedo",
+  "esperado": {
+    "quantidadeEventos": 1,
+    "eventos": [{ "tipo": "producao_leite", "campos": { "litros": 110 } }]
+  }
+}

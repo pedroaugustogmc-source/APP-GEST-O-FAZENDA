@@ -1,0 +1,7 @@
+{
+  "transcricao": "morreu um bezerro no pasto novo, acho que foi cobra",
+  "esperado": {
+    "quantidadeEventos": 1,
+    "eventos": [{ "tipo": "mortalidade", "campos": {}, "camposFaltantesContem": "brinco" }]
+  }
+}

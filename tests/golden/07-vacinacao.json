@@ -1,0 +1,7 @@
+{
+  "transcricao": "vacinei as bezerra de brucelose, foram quinze, lote da vacina B dois três quatro",
+  "esperado": {
+    "quantidadeEventos": 1,
+    "eventos": [{ "tipo": "vacinacao", "campos": { "n_animais": 15, "lote_fabricacao": "B234" } }]
+  }
+}

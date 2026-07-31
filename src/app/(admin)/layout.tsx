@@ -10,8 +10,10 @@ const LINKS = [
   { href: "/maquinas", label: "Máquinas" },
   { href: "/insumos", label: "Insumos" },
   { href: "/trabalhadores", label: "Trabalhadores" },
+  { href: "/revisao", label: "Revisão do bot" },
   { href: "/parametros", label: "Parâmetros" },
   { href: "/importar", label: "Importar planilha" },
+  { href: "/cartao-bolso", label: "Cartão de bolso" },
 ] as const;
 
 export default function LayoutAdmin({ children }: { children: React.ReactNode }) {

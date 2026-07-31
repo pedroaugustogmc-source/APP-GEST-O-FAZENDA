@@ -1,0 +1,23 @@
+{
+  "usuario": { "nome": "Seu Zé", "papel": "trabalhador" },
+  "pastosCadastrados": [
+    { "id": "10000000-0000-0000-0000-000000000001", "nome": "Buriti", "apelidos": ["buritizinho"] },
+    { "id": "10000000-0000-0000-0000-000000000002", "nome": "Baixão", "apelidos": [] },
+    { "id": "10000000-0000-0000-0000-000000000003", "nome": "Pasto Novo", "apelidos": [] },
+    { "id": "10000000-0000-0000-0000-000000000004", "nome": "Pasto de Cima", "apelidos": [] }
+  ],
+  "lotesAtivos": [
+    { "id": "20000000-0000-0000-0000-000000000002", "nome": "Lote 2", "categoria": "garrote", "pastoAtual": "Baixão", "cabecas": 38 },
+    { "id": "20000000-0000-0000-0000-000000000003", "nome": "Lote 3", "categoria": "garrote", "pastoAtual": "Pasto Novo", "cabecas": 40 }
+  ],
+  "maquinas": [
+    { "id": "30000000-0000-0000-0000-000000000001", "nome": "Trator vermelho", "modelo": "Massey Ferguson 275" }
+  ],
+  "vacinasPermitidas": [
+    { "nome": "Brucelose (B19)", "bloqueada": false, "motivoBloqueio": null },
+    { "nome": "Febre Aftosa", "bloqueada": true, "motivoBloqueio": "O Maranhão é zona livre de febre aftosa sem vacinação desde abril de 2024." }
+  ],
+  "insumos": [
+    { "id": "40000000-0000-0000-0000-000000000001", "nome": "Sal mineral", "unidade": "saco" }
+  ]
+}

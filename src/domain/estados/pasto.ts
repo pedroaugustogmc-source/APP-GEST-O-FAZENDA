@@ -1,4 +1,5 @@
-import { ErroTransicaoInvalida } from "./erro";
+// Extensão .ts explícita — ver nota em estados/animal.ts (também roda na Edge Function Deno).
+import { ErroTransicaoInvalida } from "./erro.ts";
 
 // docs/01-dominio.md §11: pasto: em_uso ⇄ descanso → (vedado | reforma) → descanso
 export type StatusPasto = "em_uso" | "descanso" | "vedado" | "reforma";

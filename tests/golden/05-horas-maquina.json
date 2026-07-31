@@ -1,0 +1,7 @@
+{
+  "transcricao": "rodei o trator vermelho seis hora hoje roçando",
+  "esperado": {
+    "quantidadeEventos": 1,
+    "eventos": [{ "tipo": "horas_maquina", "campos": { "horas": 6 } }]
+  }
+}

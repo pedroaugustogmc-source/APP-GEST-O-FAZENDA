@@ -1,0 +1,7 @@
+{
+  "transcricao": "precisa arrumar a cerca do pasto de cima, tem três palanque caído",
+  "esperado": {
+    "quantidadeEventos": 1,
+    "eventos": [{ "tipo": "demanda", "campos": {} }]
+  }
+}

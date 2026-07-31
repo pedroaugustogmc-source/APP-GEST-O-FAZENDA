@@ -36,3 +36,10 @@ enable_confirmations = false
 
 [analytics]
 enabled = false
+
+# Fase 2 — webhook do bot. import_map compartilhado permite que o código de
+# src/domain e src/infra (também usado pelo Next.js) resolva o pacote "zod"
+# sem precisar de um fork Deno-only desses arquivos.
+[functions.bot-webhook]
+verify_jwt = false
+import_map = "./functions/import_map.json"

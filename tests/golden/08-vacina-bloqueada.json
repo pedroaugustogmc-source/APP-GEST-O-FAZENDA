@@ -1,0 +1,7 @@
+{
+  "transcricao": "vou vacinar de aftosa semana que vem",
+  "esperado": {
+    "quantidadeEventos": 1,
+    "eventos": [{ "tipo": "bloqueio", "campos": {} }]
+  }
+}

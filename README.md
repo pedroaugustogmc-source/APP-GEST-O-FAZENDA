@@ -2,7 +2,7 @@
 
 Cria-recria + leite · sul do Maranhão · PWA offline-first + captura de campo por voz.
 
-Este repositório tem a especificação completa em `docs/` e o código da **Fase 1 — Fundação** (banco, RLS, PWA, cadastros básicos, importador). As fases seguintes (bot, mapa de pastos, financeiro, máquinas, WhatsApp) ainda não foram construídas — ver a tabela de fases em `CLAUDE.md`.
+Este repositório tem a especificação completa em `docs/` e o código das **Fase 1 — Fundação** (banco, RLS, PWA, cadastros básicos, importador) e **Fase 2 — Captura por voz** (bot Telegram, transcrição, extração, validação semântica, fila de revisão). As fases seguintes (mapa de pastos, financeiro, máquinas, WhatsApp) ainda não foram construídas — ver a tabela de fases em `CLAUDE.md`.
 
 ---
 
@@ -84,6 +84,74 @@ Você deve ver `CLAUDE.md` na lista. Se não aparecer, você não está na pasta
 
 ---
 
+## Fase 2 — Bot: passo a passo
+
+> **Nota desta sessão:** o arquivo `.env.example` não pôde ser editado (permissão do ambiente bloqueia leitura/escrita em qualquer `.env*`). As variáveis novas abaixo precisam ser adicionadas manualmente ao seu `.env.local` — a lista completa está aqui e também no bloco de variáveis do `ESTADO.md`.
+
+1. **Contas/credenciais que você precisa ter em mãos**
+   - Bot no Telegram criado via [@BotFather](https://t.me/BotFather) → token.
+   - Chave da **Claude API** ([platform.claude.com](https://platform.claude.com)) — usada na extração estruturada.
+   - Chave da **Groq API** ([console.groq.com](https://console.groq.com)) — usada na transcrição de áudio. A Claude Messages API **não aceita áudio bruto** (só texto/imagem/documento) — por isso a transcrição é um passo separado, com outro provedor. Decisão registrada em `ESTADO.md`; se você preferir outro provedor de ASR, troque só `src/infra/asr/groq.ts` por uma nova implementação da mesma interface `Transcritor`.
+
+2. **Acrescente ao `.env.local`**
+
+   ```bash
+   TELEGRAM_BOT_TOKEN=            # do @BotFather
+   TELEGRAM_WEBHOOK_SECRET=       # qualquer string aleatória sua, ex: openssl rand -hex 32
+   ANTHROPIC_API_KEY=
+   GROQ_API_KEY=
+   CLAUDE_MODEL_EXTRATOR=         # opcional — default é claude-opus-5
+   CRON_SECRET=                   # só para rodar o worker de retry localmente; a Vercel injeta sozinha em produção
+   ```
+
+3. **Aplique a migração da Fase 2**
+
+   ```bash
+   npm run db:reset
+   ```
+
+   Isso já roda `supabase/migrations/20260731120000_fase2_bot.sql` (novos `parametros_fazenda` do bot + a função `gravar_eventos_mensagem_bot`) junto com o resto.
+
+4. **Configure os secrets da Edge Function** (não são as mesmas variáveis do `.env.local` — a função roda em Deno, isolada do Next.js)
+
+   ```bash
+   supabase secrets set TELEGRAM_BOT_TOKEN=... TELEGRAM_WEBHOOK_SECRET=... ANTHROPIC_API_KEY=... GROQ_API_KEY=...
+   ```
+
+   `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` a própria Supabase já injeta nas Edge Functions — não precisa configurar.
+
+5. **Suba a função localmente e registre o webhook**
+
+   ```bash
+   supabase functions serve bot-webhook
+   ```
+
+   Em outro terminal, exponha a porta local (ex.: `ngrok http 54321`) e registre no Telegram:
+
+   ```bash
+   curl "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook?url=<url-publica>/functions/v1/bot-webhook&secret_token=<TELEGRAM_WEBHOOK_SECRET>"
+   ```
+
+   Em produção, `<url-publica>` é a URL do projeto Supabase (`supabase functions deploy bot-webhook` primeiro).
+
+6. **Teste de ponta a ponta**
+   - Cadastre um trabalhador pela tela `/trabalhadores` (telefone + plataforma `telegram`).
+   - Mande uma mensagem pro bot no Telegram — na primeira vez ele vai pedir pra você compartilhar o contato (é assim que o telefone cadastrado se liga ao seu `chat_id`, o Telegram não entrega telefone de graça).
+   - Depois disso, mande uma nota de voz ou texto (ex.: "choveu bem ontem, uns quarenta milímetro") e confira em `/revisao` ou direto na tabela `mensagens_bot`.
+   - Imprima o `/cartao-bolso` (formato A6) pro vaqueiro que vai usar o bot pela primeira vez.
+
+7. **Confira**
+
+   ```bash
+   npm run lint
+   npm run typecheck
+   npm test                # domínio (~180 testes) + os 3 specs de integração abaixo, SKIPPED sem env real
+   # tests/integration/extrator.spec.ts   — precisa de ANTHROPIC_API_KEY (os 12 few-shots do §31)
+   # tests/integration/bot-webhook.spec.ts — precisa de Supabase local + `supabase functions serve` + os secrets acima
+   ```
+
+---
+
 ## Estrutura
 
 ```
@@ -105,20 +173,25 @@ docs/
   settings.json        ← permissões de ferramenta
   commands/            ← comandos do projeto (abaixo)
 src/                   ← código (Fase 1 em diante)
-  domain/              ← regras puras: tipos, estados, validação — zero import de framework
-  infra/               ← supabase, offline (fila/Dexie), importador de CSV
-  app/                 ← rotas Next (App Router) — login + telas de cadastro + API routes
+  domain/              ← regras puras: tipos, estados, validação, calculos — zero import de framework
+  infra/               ← supabase, offline (fila/Dexie), importador de CSV, messaging/asr/claude (bot)
+  app/                 ← rotas Next (App Router) — login + telas de cadastro + revisão + API routes
   components/          ← ui/ (shadcn) + componentes que falam com infra
 supabase/
-  migrations/          ← DDL + RLS + auditoria, idempotente
+  migrations/          ← DDL + RLS + auditoria + função de gravação do bot, idempotente
+  functions/
+    bot-webhook/        ← Edge Function (Deno) — webhook do Telegram (Fase 2)
+    import_map.json      ← mapeia "zod" para npm: (código compartilhado com o Next.js)
   seed.sql             ← parametros_fazenda + vacinas_catalogo (sem dado desta fazenda)
   config.toml          ← config do `supabase start` local
 tests/
   e2e/                 ← Playwright (login, cadastro, offline)
-  integration/         ← rls.spec.ts — o teste obrigatório do §14
+  integration/         ← rls.spec.ts (§14) · extrator.spec.ts (§31/§40) · bot-webhook.spec.ts
+  golden/              ← os 12 few-shots do §31, viram fixture do extrator
   fixtures/            ← planilha-exemplo.csv do importador
 scripts/
   gabarito.ts          ← roda o Anexo A contra src/domain/calculos/
+vercel.json            ← cron do worker de retry do bot (§33)
 ```
 
 **Por que a spec está fatiada:** o Claude Code carrega `CLAUDE.md` em toda sessão. Se a especificação inteira estivesse lá, você queimaria contexto a cada turno. Assim, o `CLAUDE.md` fica com as regras invioláveis e o mapa; os detalhes são lidos só quando a tarefa exige.
