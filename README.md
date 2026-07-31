@@ -52,12 +52,16 @@ Você deve ver `CLAUDE.md` na lista. Se não aparecer, você não está na pasta
 
    Isso roda `supabase/migrations/20260730120000_schema_inicial.sql` (schema completo + RLS + auditoria) e `supabase/seed.sql` (parâmetros de fábrica + catálogo de vacinas) do zero. Nenhum dado específico desta fazenda é semeado — pastos, rebanho, máquinas e insumos você cadastra pelo app (decisão da Fase 0, ver `ESTADO.md`).
 
-4. **Crie o primeiro admin** — o cadastro público está desligado de propósito (§M11: só admin cria acesso)
+4. **Crie a propriedade e o primeiro admin** — o cadastro público está desligado de propósito (§M11: só admin cria acesso). Desde a F6, `usuarios_acesso`/`pastos`/`lotes`/`maquinas`/`financeiro` exigem `propriedade_id` (fundação multi-fazenda, ver `ESTADO.md`) — sem isso o admin fica sem enxergar o próprio dado.
    - No Supabase Studio: Authentication → Users → Add user (e-mail + senha).
    - Copie o UUID do usuário criado e rode no SQL Editor:
      ```sql
-     insert into usuarios_acesso (auth_user_id, telefone, nome, papel, status, data_admissao)
-     values ('<uuid-do-usuario>', '+55SEUTELEFONE', 'Seu nome', 'admin', 'ativo', current_date);
+     insert into propriedade (nome, municipio, uf)
+     values ('Nome da sua fazenda', 'Imperatriz', 'MA')
+     returning id; -- guarde este UUID, é o <uuid-da-propriedade> do próximo passo
+
+     insert into usuarios_acesso (auth_user_id, telefone, nome, papel, status, data_admissao, propriedade_id)
+     values ('<uuid-do-usuario>', '+55SEUTELEFONE', 'Seu nome', 'admin', 'ativo', current_date, '<uuid-da-propriedade>');
      ```
 
 5. **Rode local**
@@ -192,6 +196,54 @@ Você deve ver `CLAUDE.md` na lista. Se não aparecer, você não está na pasta
    npm test
    npm run build
    npm run gabarito         # continua 8/8 — nenhuma função nova de F5 está no Anexo A
+   ```
+
+---
+
+## Fase 6 — Escala: passo a passo
+
+> **Mesma nota da Fase 2:** `.env.example` continua bloqueado neste ambiente. Variáveis novas abaixo vão no seu `.env.local` (Next.js) ou nos secrets da Edge Function (WhatsApp), conforme indicado.
+
+1. **WhatsApp Business API é opcional** — o Telegram continua funcionando exatamente como antes; WhatsApp é um segundo adapter que roda em paralelo (`bot-webhook-whatsapp`, Edge Function própria), não uma substituição. Sem as variáveis abaixo configuradas, essa função simplesmente não recebe tráfego (nenhum webhook configurado na Meta apontando pra ela).
+   - Crie um app no [Meta for Developers](https://developers.facebook.com), adicione o produto **WhatsApp**, pegue o `access token` (temporário para teste, permanente via System User para produção) e o `phone_number_id` do número de teste/produção.
+   - Defina você mesmo um `WHATSAPP_VERIFY_TOKEN` (qualquer string) — é o que a Meta manda de volta no handshake `GET` de verificação do webhook.
+   - `WHATSAPP_APP_SECRET` fica em App Settings → Basic → App Secret — usado para validar a assinatura HMAC de cada mensagem recebida (header `X-Hub-Signature-256`).
+
+2. **Configure os secrets da Edge Function**
+
+   ```bash
+   supabase secrets set WHATSAPP_ACCESS_TOKEN=... WHATSAPP_PHONE_NUMBER_ID=... WHATSAPP_VERIFY_TOKEN=... WHATSAPP_APP_SECRET=...
+   ```
+
+3. **Aplique a migração da Fase 6**
+
+   ```bash
+   npm run db:reset
+   ```
+
+   Isso roda `supabase/migrations/20260804120000_fase6_escala.sql`: `financeiro.quantidade`/`unidade` (nota fiscal de produtor), a view `mv_efetivo_por_categoria` (declaração de rebanho) e a **fundação de multi-fazenda** (`propriedade_id` em `usuarios_acesso`/`pastos`/`lotes`/`maquinas`/`financeiro` + RLS escopada por propriedade). Se seu banco já tem uma propriedade e um admin cadastrados, a migração faz o backfill sozinha; se é um banco novo, o passo 4 da Fase 1 (README, acima) já foi atualizado para criar a propriedade **antes** do admin — refaça esse passo se seu admin atual ficou sem `propriedade_id`.
+
+4. **Suba a função do WhatsApp localmente e registre o webhook**
+
+   ```bash
+   supabase functions serve bot-webhook-whatsapp
+   ```
+
+   No Meta for Developers → WhatsApp → Configuration, aponte o webhook para `<url-publica>/functions/v1/bot-webhook-whatsapp`, use o `WHATSAPP_VERIFY_TOKEN` do passo 1 na verificação, e assine o campo `messages`.
+
+5. **Teste de ponta a ponta**
+   - Cadastre um trabalhador em `/trabalhadores` com plataforma `whatsapp` e o telefone no formato E.164 que a Meta usa (sem `+`, ex.: `5599999999999`).
+   - Mande uma mensagem de texto ou áudio pro número de teste do WhatsApp — como o telefone já vem em toda mensagem (diferente do Telegram), não tem passo de "compartilhar contato": a primeira mensagem já deveria ser reconhecida.
+   - Confira `/compliance` — declaração de rebanho, preparo de GTA dos últimos lotes vendidos/encerrados, comprovação de vacinação, busca por brinco (rastreabilidade) e nota fiscal de produtor. Leia o aviso obrigatório no topo da tela antes de usar qualquer dado dela com o contador/AGED-MA.
+
+6. **Confira**
+
+   ```bash
+   npm run lint
+   npm run typecheck
+   npm test
+   npm run build
+   npm run gabarito         # continua 8/8 — nenhuma função nova de F6 está no Anexo A
    ```
 
 ---

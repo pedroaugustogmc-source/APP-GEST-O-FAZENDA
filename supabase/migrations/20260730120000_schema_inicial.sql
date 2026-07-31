@@ -624,6 +624,48 @@ $$;
 
 grant execute on function current_papel() to authenticated;
 
+-- audit_trigger(): genérica, funciona em qualquer tabela com coluna id uuid.
+-- security definer para gravar em auditoria independente da RLS do papel que
+-- disparou o INSERT/UPDATE original (ex.: gerente inserindo uma pesagem).
+-- Definida ANTES do loop abaixo (que já cria triggers usando esta função em
+-- cada tabela) — Postgres exige que a função exista no momento do CREATE
+-- TRIGGER, não só no momento em que o trigger dispara.
+create or replace function audit_trigger() returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_registro uuid;
+  v_deletado_antes boolean;
+  v_deletado_depois boolean;
+  v_acao text;
+begin
+  if tg_op = 'INSERT' then
+    v_registro := (to_jsonb(new)->>'id')::uuid;
+    insert into auditoria (tabela, registro_id, acao, dados_antes, dados_depois, usuario_id, origem)
+    values (
+      tg_table_name, v_registro, 'INSERT', null, to_jsonb(new), auth.uid(),
+      coalesce(current_setting('app.origem', true), 'desconhecida')
+    );
+    return new;
+  elsif tg_op = 'UPDATE' then
+    v_registro := (to_jsonb(new)->>'id')::uuid;
+    v_deletado_antes := coalesce((to_jsonb(old)->>'deletado_em') is not null, false);
+    v_deletado_depois := coalesce((to_jsonb(new)->>'deletado_em') is not null, false);
+    v_acao := case when (not v_deletado_antes) and v_deletado_depois then 'SOFT_DELETE' else 'UPDATE' end;
+
+    insert into auditoria (tabela, registro_id, acao, dados_antes, dados_depois, usuario_id, origem)
+    values (
+      tg_table_name, v_registro, v_acao, to_jsonb(old), to_jsonb(new), auth.uid(),
+      coalesce(current_setting('app.origem', true), 'desconhecida')
+    );
+    return new;
+  end if;
+  return null;
+end;
+$$;
+
 do $$
 declare
   tbl text;
@@ -693,45 +735,6 @@ end $$;
 alter table auditoria enable row level security;
 drop policy if exists admin_select on auditoria;
 create policy admin_select on auditoria for select using (current_papel() = 'admin');
-
--- audit_trigger(): genérica, funciona em qualquer tabela com coluna id uuid.
--- security definer para gravar em auditoria independente da RLS do papel que
--- disparou o INSERT/UPDATE original (ex.: gerente inserindo uma pesagem).
-create or replace function audit_trigger() returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_registro uuid;
-  v_deletado_antes boolean;
-  v_deletado_depois boolean;
-  v_acao text;
-begin
-  if tg_op = 'INSERT' then
-    v_registro := (to_jsonb(new)->>'id')::uuid;
-    insert into auditoria (tabela, registro_id, acao, dados_antes, dados_depois, usuario_id, origem)
-    values (
-      tg_table_name, v_registro, 'INSERT', null, to_jsonb(new), auth.uid(),
-      coalesce(current_setting('app.origem', true), 'desconhecida')
-    );
-    return new;
-  elsif tg_op = 'UPDATE' then
-    v_registro := (to_jsonb(new)->>'id')::uuid;
-    v_deletado_antes := coalesce((to_jsonb(old)->>'deletado_em') is not null, false);
-    v_deletado_depois := coalesce((to_jsonb(new)->>'deletado_em') is not null, false);
-    v_acao := case when (not v_deletado_antes) and v_deletado_depois then 'SOFT_DELETE' else 'UPDATE' end;
-
-    insert into auditoria (tabela, registro_id, acao, dados_antes, dados_depois, usuario_id, origem)
-    values (
-      tg_table_name, v_registro, v_acao, to_jsonb(old), to_jsonb(new), auth.uid(),
-      coalesce(current_setting('app.origem', true), 'desconhecida')
-    );
-    return new;
-  end if;
-  return null;
-end;
-$$;
 
 -- ----------------------------------------------------------------------------
 -- 9. Privilégios explícitos e proibição de DELETE (§16)

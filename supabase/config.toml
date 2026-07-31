@@ -43,3 +43,12 @@ enabled = false
 [functions.bot-webhook]
 verify_jwt = false
 import_map = "./functions/import_map.json"
+
+# Fase 6 — webhook do bot via WhatsApp Cloud API. verify_jwt=false porque a
+# Meta chama este endpoint sem token de sessão Supabase — a autenticidade da
+# chamada é garantida pelo handshake GET (hub.verify_token) e pela
+# verificação HMAC do header X-Hub-Signature-256 no POST (feita no próprio
+# handler, não pelo Supabase).
+[functions.bot-webhook-whatsapp]
+verify_jwt = false
+import_map = "./functions/import_map.json"

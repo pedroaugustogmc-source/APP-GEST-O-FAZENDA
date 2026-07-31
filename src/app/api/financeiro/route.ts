@@ -35,4 +35,5 @@ export const { POST, PATCH } = criarRotaEntidade({
   esquemaCriacao,
   esquemaAtualizacao,
   comRegistradoPor: true,
+  comPropriedadeId: true,
 });

@@ -19,6 +19,14 @@ interface OpcoesRotaEntidade<
    * cliente"). Necessário para lotes e animais.
    */
   comRegistradoPor?: boolean;
+  /**
+   * Quando true, injeta propriedade_id = usuarios_acesso.propriedade_id do
+   * admin logado, ignorando qualquer valor vindo do cliente — mesmo
+   * raciocínio de comRegistradoPor, aplicado à fundação multi-fazenda da F6
+   * (docs/02-dados.md §14). Necessário para usuarios_acesso, pastos, lotes,
+   * maquinas e financeiro.
+   */
+  comPropriedadeId?: boolean;
 }
 
 function respostaErro(mensagem: string, status: number) {
@@ -44,11 +52,12 @@ export function criarRotaEntidade<
 
     const { data: usuario } = await supabase
       .from("usuarios_acesso")
-      .select("id")
+      .select("id, propriedade_id")
       .eq("auth_user_id", sessao.user.id)
       .single();
 
-    return usuario?.id ?? null;
+    if (!usuario) return null;
+    return { id: usuario.id as string, propriedadeId: (usuario.propriedade_id as string | null) ?? null };
   }
 
   async function POST(request: Request) {
@@ -64,10 +73,16 @@ export function criarRotaEntidade<
 
     let dados: Record<string, unknown> = { ...analisado.data };
 
-    if (opcoes.comRegistradoPor) {
-      const usuarioId = await obterUsuarioLogado();
-      if (!usuarioId) return respostaErro("Sessão inválida ou usuário sem cadastro em usuarios_acesso.", 401);
-      dados = { ...dados, registrado_por: usuarioId };
+    if (opcoes.comRegistradoPor || opcoes.comPropriedadeId) {
+      const usuario = await obterUsuarioLogado();
+      if (!usuario) return respostaErro("Sessão inválida ou usuário sem cadastro em usuarios_acesso.", 401);
+      if (opcoes.comRegistradoPor) dados = { ...dados, registrado_por: usuario.id };
+      if (opcoes.comPropriedadeId) {
+        if (!usuario.propriedadeId) {
+          return respostaErro("Usuário logado ainda não está vinculado a uma propriedade.", 401);
+        }
+        dados = { ...dados, propriedade_id: usuario.propriedadeId };
+      }
     }
 
     const supabase = criarClienteServidor();

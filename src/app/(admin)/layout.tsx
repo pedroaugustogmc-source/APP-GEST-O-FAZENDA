@@ -18,6 +18,7 @@ const LINKS = [
   { href: "/cotacoes", label: "Cotações" },
   { href: "/tarefas", label: "Tarefas" },
   { href: "/relatorios", label: "Relatórios" },
+  { href: "/compliance", label: "Compliance" },
   { href: "/insumos", label: "Insumos" },
   { href: "/trabalhadores", label: "Trabalhadores" },
   { href: "/revisao", label: "Revisão do bot" },

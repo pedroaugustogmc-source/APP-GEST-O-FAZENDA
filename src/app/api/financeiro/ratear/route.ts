@@ -43,8 +43,13 @@ export async function POST(request: Request) {
   const { data: sessao } = await supabase.auth.getUser();
   if (!sessao.user) return respostaErro("Sessão inválida.", 401);
 
-  const { data: admin } = await supabase.from("usuarios_acesso").select("id").eq("auth_user_id", sessao.user.id).single();
+  const { data: admin } = await supabase
+    .from("usuarios_acesso")
+    .select("id, propriedade_id")
+    .eq("auth_user_id", sessao.user.id)
+    .single();
   if (!admin) return respostaErro("Usuário sem cadastro em usuarios_acesso.", 401);
+  if (!admin.propriedade_id) return respostaErro("Usuário logado ainda não está vinculado a uma propriedade.", 401);
 
   const corpo = await request.json().catch(() => null);
   const analisado = Esquema.safeParse(corpo);
@@ -116,6 +121,7 @@ export async function POST(request: Request) {
     prazo_dias: 0,
     pago: true,
     registrado_por: admin.id,
+    propriedade_id: admin.propriedade_id,
   }));
 
   const { data: gravadas, error } = await supabase.from("financeiro").insert(linhas).select("id, lote_id, valor_centavos");

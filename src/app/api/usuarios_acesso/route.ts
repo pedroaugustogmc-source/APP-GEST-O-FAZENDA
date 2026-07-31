@@ -29,4 +29,5 @@ export const { POST, PATCH } = criarRotaEntidade({
   tabela: "usuarios_acesso",
   esquemaCriacao,
   esquemaAtualizacao,
+  comPropriedadeId: true,
 });

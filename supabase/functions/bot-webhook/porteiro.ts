@@ -21,13 +21,14 @@ export type ResultadoPorteiro =
 export async function passarPeloPorteiro(
   supabase: any,
   chatIdExterno: string,
-  telefoneCompartilhado: string | null
+  telefoneCompartilhado: string | null,
+  plataforma: "telegram" | "whatsapp"
 ): Promise<ResultadoPorteiro> {
   const { data: porChatId, error: erroChatId } = await supabase
     .from("usuarios_acesso")
     .select("id, nome, papel, telefone")
     .eq("chat_id_externo", chatIdExterno)
-    .eq("plataforma", "telegram")
+    .eq("plataforma", plataforma)
     .eq("status", "ativo")
     .maybeSingle();
   if (erroChatId) throw new Error(`Falha no porteiro (busca por chat_id): ${erroChatId.message}`);
@@ -44,7 +45,7 @@ export async function passarPeloPorteiro(
     .from("usuarios_acesso")
     .select("id, nome, papel, telefone")
     .eq("telefone", telefoneCompartilhado)
-    .eq("plataforma", "telegram")
+    .eq("plataforma", plataforma)
     .eq("status", "ativo")
     .is("chat_id_externo", null)
     .maybeSingle();

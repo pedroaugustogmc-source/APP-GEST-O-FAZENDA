@@ -47,6 +47,7 @@ export interface PastoRow {
   observacao: string | null;
   client_uuid: string | null;
   criado_em: string;
+  propriedade_id: string;
 }
 
 export interface LoteRow {
@@ -66,6 +67,7 @@ export interface LoteRow {
   registrado_por: string;
   registrado_em: string;
   deletado_em: string | null;
+  propriedade_id: string;
 }
 
 export interface AnimalRow {
@@ -75,6 +77,7 @@ export interface AnimalRow {
   sexo: SexoAnimalDB;
   categoria: CategoriaAnimalDB;
   data_nascimento: string | null;
+  matriz_id: string | null;
   origem: "nascimento" | "compra" | "importacao";
   peso_nascimento: number | null;
   status: StatusAnimalDB;
@@ -102,6 +105,7 @@ export interface MaquinaRow {
   observacao: string | null;
   client_uuid: string | null;
   criado_em: string;
+  propriedade_id: string;
 }
 
 export interface PlanoManutencaoRow {
@@ -236,6 +240,7 @@ export interface UsuarioAcessoRow {
   data_desligamento: string | null;
   client_uuid: string | null;
   criado_em: string;
+  propriedade_id: string;
 }
 
 export interface ParametroRow {
@@ -300,18 +305,23 @@ export interface FinanceiroRow {
   lote_id: string | null;
   centro_custo: CentroCustoDB;
   maquina_id: string | null;
+  /** Fornecedor quando tipo=custo; comprador quando tipo=receita (Anexo H). */
   fornecedor: string | null;
   forma_pagamento: string | null;
   prazo_dias: number;
   vencimento: string | null;
   pago: boolean;
   nota_fiscal: string | null;
+  /** Anexo H — nota fiscal de produtor. */
+  quantidade: number | null;
+  unidade: string | null;
   mensagem_id: string | null;
   client_uuid: string | null;
   registrado_por: string;
   registrado_em: string;
   deletado_em: string | null;
   estorna_id: string | null;
+  propriedade_id: string;
 }
 
 export interface PrecoMercadoRow {
