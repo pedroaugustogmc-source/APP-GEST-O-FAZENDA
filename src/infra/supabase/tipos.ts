@@ -202,6 +202,7 @@ export interface ChecklistItemRow {
   ativo: boolean;
   client_uuid: string | null;
   criado_em: string;
+  propriedade_id: string;
 }
 
 export type TipoRelatorioDB = "semanal" | "trimestral" | "sob_demanda" | "geral";
@@ -227,6 +228,7 @@ export interface InsumoRow {
   local_armazenamento: string | null;
   client_uuid: string | null;
   atualizado_em: string;
+  propriedade_id: string;
 }
 
 export interface UsuarioAcessoRow {

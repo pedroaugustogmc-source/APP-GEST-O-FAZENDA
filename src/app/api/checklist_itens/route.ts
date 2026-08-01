@@ -24,4 +24,5 @@ export const { POST, PATCH } = criarRotaEntidade({
   tabela: "checklist_itens",
   esquemaCriacao,
   esquemaAtualizacao,
+  comPropriedadeId: true,
 });

@@ -23,6 +23,7 @@ const LINKS = [
   { href: "/trabalhadores", label: "Trabalhadores" },
   { href: "/revisao", label: "Revisão do bot" },
   { href: "/parametros", label: "Parâmetros" },
+  { href: "/propriedades", label: "Propriedade" },
   { href: "/importar", label: "Importar planilha" },
   { href: "/cartao-bolso", label: "Cartão de bolso" },
 ] as const;
