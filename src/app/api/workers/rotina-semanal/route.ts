@@ -5,6 +5,7 @@ import { scoreTarefa } from "@/domain/calculos/scoreTarefa";
 import { criarAdapterTelegram } from "@/infra/messaging/telegram";
 import { criarAdapterGoogleCalendar, credenciaisGoogleCalendarDoAmbiente } from "@/infra/calendar/google";
 import { montarRelatorioSemanal, montarRelatorioTrimestral } from "@/infra/relatorios/montarRelatorio";
+import { listarPropriedades, construirContextoFazenda, type ContextoFazenda } from "@/infra/supabase/propriedades";
 import { hojeEmFortaleza, partesDeISODate } from "@/domain/tipos/data";
 import type { ISODate, Parametros } from "@/domain/tipos";
 import type { TarefaRow } from "@/infra/supabase/tipos";
@@ -14,6 +15,14 @@ import type { TarefaRow } from "@/infra/supabase/tipos";
 // um cron só faz priorização + sincronização com o Calendar + relatório
 // semanal (e trimestral, nos meses de virada) — em vez de 2 crons novos,
 // mantendo o total em 4 (risco do plano Hobby da Vercel já registrado).
+//
+// Fase 6c: roda com service_role, que ignora RLS — sem laço por fazenda,
+// tarefas/relatórios ficariam misturados entre propriedades. Cada etapa
+// recebe o `ContextoFazenda` da iteração. Exceção: a sincronização com o
+// Google Calendar continua UMA chamada por fazenda dentro do mesmo laço,
+// mas escrevendo no único calendário configurado no ambiente (não existe
+// "1 calendário por fazenda" hoje) — os títulos dos eventos ganham o nome
+// da fazenda como prefixo pra não confundir quando houver mais de uma.
 //
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Supa = any;
@@ -35,11 +44,18 @@ export async function GET(request: Request) {
   const parametros = await buscarParametros(supabase);
   const hoje = hojeEmFortaleza();
 
-  const priorizacao = await priorizarTarefas(supabase, hoje);
-  const calendar = await sincronizarComCalendar(supabase, parametros);
-  const relatorio = await gerarEEnviarRelatorios(supabase, parametros, hoje);
+  const propriedades = await listarPropriedades(supabase);
+  const porFazenda: Record<string, unknown> = {};
 
-  return NextResponse.json({ gerado_em: new Date().toISOString(), priorizacao, calendar, relatorio });
+  for (const propriedade of propriedades) {
+    const ctx = await construirContextoFazenda(supabase, propriedade);
+    const priorizacao = await priorizarTarefas(supabase, hoje, ctx);
+    const calendar = await sincronizarComCalendar(supabase, parametros, ctx);
+    const relatorio = await gerarEEnviarRelatorios(supabase, parametros, hoje, ctx);
+    porFazenda[propriedade.nome] = { priorizacao, calendar, relatorio };
+  }
+
+  return NextResponse.json({ gerado_em: new Date().toISOString(), fazendas: porFazenda });
 }
 
 interface CandidataTarefa {
@@ -61,11 +77,16 @@ function chaveTarefa(entidadeTipo: string, entidadeId: string | null, tipo: stri
 // risco*0,20 − custo_normalizado*0,10 (scoreTarefa, Anexo B). Alertas não
 // carregam estimativa de custo estruturada hoje — custoNormalizado fica 0
 // (honesto: nenhum alerta atual popula isso, não é fabricado).
-async function priorizarTarefas(supabase: Supa, hoje: ISODate): Promise<{ criadas: number; atualizadas: number; concluidas_automaticamente: number }> {
+async function priorizarTarefas(supabase: Supa, hoje: ISODate, ctx: ContextoFazenda): Promise<{ criadas: number; atualizadas: number; concluidas_automaticamente: number }> {
   const [{ data: alertasAbertos }, { data: checklistDevidos }, { data: tarefasPendentes }] = await Promise.all([
-    supabase.from("alertas").select("tipo, severidade, entidade_tipo, entidade_id, titulo, mensagem").is("resolvido_em", null).in("severidade", ["critico", "atencao"]),
-    supabase.from("checklist_itens").select("id, descricao, categoria, proxima_execucao").eq("ativo", true).lte("proxima_execucao", hoje),
-    supabase.from("tarefas").select("id, entidade_tipo, entidade_id, tipo").eq("status", "pendente"),
+    supabase
+      .from("alertas")
+      .select("tipo, severidade, entidade_tipo, entidade_id, titulo, mensagem")
+      .is("resolvido_em", null)
+      .in("severidade", ["critico", "atencao"])
+      .eq("propriedade_id", ctx.propriedadeId),
+    supabase.from("checklist_itens").select("id, descricao, categoria, proxima_execucao").eq("ativo", true).lte("proxima_execucao", hoje).eq("propriedade_id", ctx.propriedadeId),
+    supabase.from("tarefas").select("id, entidade_tipo, entidade_id, tipo").eq("status", "pendente").eq("propriedade_id", ctx.propriedadeId),
   ]);
 
   const candidatas: CandidataTarefa[] = [];
@@ -135,6 +156,7 @@ async function priorizarTarefas(supabase: Supa, hoje: ISODate): Promise<{ criada
         entidade_tipo: candidata.entidadeTipo,
         entidade_id: candidata.entidadeId,
         status: "pendente",
+        propriedade_id: ctx.propriedadeId,
       });
       criadas += 1;
     }
@@ -152,7 +174,7 @@ async function priorizarTarefas(supabase: Supa, hoje: ISODate): Promise<{ criada
   return { criadas, atualizadas, concluidas_automaticamente: concluidasAutomaticamente };
 }
 
-async function sincronizarComCalendar(supabase: Supa, parametros: Parametros): Promise<{ sincronizadas: number; removidas: number; configurado: boolean }> {
+async function sincronizarComCalendar(supabase: Supa, parametros: Parametros, ctx: ContextoFazenda): Promise<{ sincronizadas: number; removidas: number; configurado: boolean }> {
   const credenciais = credenciaisGoogleCalendarDoAmbiente();
   if (!credenciais) return { sincronizadas: 0, removidas: 0, configurado: false };
 
@@ -163,6 +185,7 @@ async function sincronizarComCalendar(supabase: Supa, parametros: Parametros): P
     .from("tarefas")
     .select("id, data, prazo, descricao, status, calendar_event_id, score_prioridade")
     .in("status", ["pendente", "concluida", "cancelada"])
+    .eq("propriedade_id", ctx.propriedadeId)
     .order("score_prioridade", { ascending: false, nullsFirst: false });
 
   const tarefas = (data ?? []) as Array<Pick<TarefaRow, "id" | "data" | "prazo" | "descricao" | "status" | "calendar_event_id" | "score_prioridade">>;
@@ -175,7 +198,8 @@ async function sincronizarComCalendar(supabase: Supa, parametros: Parametros): P
   for (let i = 0; i < pendentes.length; i += 1) {
     const tarefa = pendentes[i]!;
     if (i < limite) {
-      const id = await adapter.criarOuAtualizarEvento({ titulo: tarefa.descricao, data: tarefa.prazo ?? tarefa.data }, tarefa.calendar_event_id);
+      const titulo = `${ctx.propriedadeNome}: ${tarefa.descricao}`;
+      const id = await adapter.criarOuAtualizarEvento({ titulo, data: tarefa.prazo ?? tarefa.data }, tarefa.calendar_event_id);
       if (id !== tarefa.calendar_event_id) await supabase.from("tarefas").update({ calendar_event_id: id }).eq("id", tarefa.id);
       sincronizadas += 1;
     } else if (tarefa.calendar_event_id) {
@@ -197,51 +221,65 @@ async function sincronizarComCalendar(supabase: Supa, parametros: Parametros): P
 async function gerarEEnviarRelatorios(
   supabase: Supa,
   parametros: Parametros,
-  hoje: ISODate
+  hoje: ISODate,
+  ctx: ContextoFazenda
 ): Promise<{ semanal: boolean; trimestral: boolean; enviado_ao_admin: boolean }> {
   const { data: agendaData } = await supabase
     .from("tarefas")
     .select("descricao, justificativa")
     .eq("status", "pendente")
+    .eq("propriedade_id", ctx.propriedadeId)
     .order("score_prioridade", { ascending: false, nullsFirst: false })
     .limit(5);
   const agenda = (agendaData ?? []) as Array<{ descricao: string; justificativa: string | null }>;
 
-  const semanal = await montarRelatorioSemanal(supabase, parametros, hoje, agenda);
+  const contextoRelatorio = { propriedadeId: ctx.propriedadeId, idsUsuarios: ctx.idsUsuarios };
+
+  const semanal = await montarRelatorioSemanal(supabase, parametros, hoje, agenda, contextoRelatorio);
   await supabase.from("relatorios").insert({
     tipo: semanal.tipo,
     periodo_inicio: semanal.periodoInicio,
     periodo_fim: semanal.periodoFim,
     conteudo_md: semanal.conteudoMd,
     indicadores: semanal.indicadores,
+    propriedade_id: ctx.propriedadeId,
   });
 
   let trimestral = false;
   if (ehInicioDeTrimestre(hoje)) {
-    const relatorioTrimestral = await montarRelatorioTrimestral(supabase, parametros, hoje);
+    const relatorioTrimestral = await montarRelatorioTrimestral(supabase, parametros, hoje, contextoRelatorio);
     await supabase.from("relatorios").insert({
       tipo: relatorioTrimestral.tipo,
       periodo_inicio: relatorioTrimestral.periodoInicio,
       periodo_fim: relatorioTrimestral.periodoFim,
       conteudo_md: relatorioTrimestral.conteudoMd,
       indicadores: relatorioTrimestral.indicadores,
+      propriedade_id: ctx.propriedadeId,
     });
     trimestral = true;
   }
 
-  const enviadoAoAdmin = await enviarResumoAoAdmin(supabase, semanal.conteudoMd);
+  const enviadoAoAdmin = await enviarResumoAoAdmin(supabase, semanal.conteudoMd, ctx);
 
   return { semanal: true, trimestral, enviado_ao_admin: enviadoAoAdmin };
 }
 
-// Best-effort: só envia se o admin já vinculou o Telegram (compartilhou
-// contato, F2) e se TELEGRAM_BOT_TOKEN está configurado — sem isso, o
-// relatório continua disponível na tela /relatorios, silenciosamente.
-async function enviarResumoAoAdmin(supabase: Supa, conteudoMd: string): Promise<boolean> {
+// Best-effort: só envia se o admin desta fazenda já vinculou o Telegram
+// (compartilhou contato, F2) e se TELEGRAM_BOT_TOKEN está configurado —
+// sem isso, o relatório continua disponível na tela /relatorios, silenciosamente.
+async function enviarResumoAoAdmin(supabase: Supa, conteudoMd: string, ctx: ContextoFazenda): Promise<boolean> {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
   if (!botToken) return false;
 
-  const { data: admin } = await supabase.from("usuarios_acesso").select("chat_id_externo").eq("papel", "admin").eq("status", "ativo").not("chat_id_externo", "is", null).limit(1).maybeSingle();
+  const { data: admin } = await supabase
+    .from("usuarios_acesso")
+    .select("chat_id_externo")
+    .eq("papel", "admin")
+    .eq("status", "ativo")
+    .eq("propriedade_id", ctx.propriedadeId)
+    .not("chat_id_externo", "is", null)
+    .limit(1)
+    .maybeSingle();
   if (!admin?.chat_id_externo) return false;
 
   const telegram = criarAdapterTelegram(botToken);

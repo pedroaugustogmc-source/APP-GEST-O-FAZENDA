@@ -32,32 +32,48 @@ export interface IndicadoresCria {
   taxaMortalidadeBezerro: Indicador<number>;
 }
 
+/**
+ * `idsUsuariosDaFazenda` só é necessário quando quem chama roda com
+ * service_role (workers) — RLS já escopa por fazenda pra qualquer chamada
+ * autenticada (Fase 6b, derivado via registrado_por), então uma tela normal
+ * não precisa passar nada.
+ */
 export async function buscarIndicadoresCria(
   supabase: SupabaseClient,
   parametros: Parametros,
-  hoje: ISODate
+  hoje: ISODate,
+  idsUsuariosDaFazenda?: string[]
 ): Promise<IndicadoresCria> {
   const inicioPeriodo = subtrairDias(hoje, JANELA_DIAS);
   const idadeDesmameDias = parametros.IDADE_DESMAME_DIAS ?? 240;
 
+  let queryReproducao = supabase
+    .from("reproducao")
+    .select("matriz_id, resultado, data_parto_real")
+    .is("deletado_em", null)
+    .gte("data_cobertura", inicioPeriodo);
+  let queryAnimais = supabase
+    .from("animais")
+    .select("id, matriz_id, data_nascimento, peso_nascimento, status, categoria")
+    .is("deletado_em", null)
+    .eq("origem", "nascimento")
+    .not("matriz_id", "is", null)
+    .gte("data_nascimento", inicioPeriodo);
+  let queryMortalidade = supabase
+    .from("mortalidade")
+    .select("cabecas, categoria, data")
+    .gte("data", inicioPeriodo)
+    .in("categoria", ["bezerro", "bezerra"]);
+  if (idsUsuariosDaFazenda) {
+    queryReproducao = queryReproducao.in("registrado_por", idsUsuariosDaFazenda);
+    queryAnimais = queryAnimais.in("registrado_por", idsUsuariosDaFazenda);
+    queryMortalidade = queryMortalidade.in("registrado_por", idsUsuariosDaFazenda);
+  }
+
   const [{ data: reproducaoData }, { data: animaisData }, { data: mortalidadeData }] = await Promise.all([
-    supabase
-      .from("reproducao")
-      .select("matriz_id, resultado, data_parto_real")
-      .is("deletado_em", null)
-      .gte("data_cobertura", inicioPeriodo),
-    supabase
-      .from("animais")
-      .select("id, matriz_id, data_nascimento, peso_nascimento, status, categoria")
-      .is("deletado_em", null)
-      .eq("origem", "nascimento")
-      .not("matriz_id", "is", null)
-      .gte("data_nascimento", inicioPeriodo),
-    supabase
-      .from("mortalidade")
-      .select("cabecas, categoria, data")
-      .gte("data", inicioPeriodo)
-      .in("categoria", ["bezerro", "bezerra"]),
+    queryReproducao,
+    queryAnimais,
+    queryMortalidade,
   ]);
 
   type LinhaReproducao = { matriz_id: string; resultado: string | null; data_parto_real: ISODate | null };
@@ -198,12 +214,24 @@ export interface IndicadorRecriaLote {
   gmdAbaixoMeta: boolean;
 }
 
+/**
+ * `mv_indicadores_recria` é view MATERIALIZADA — Postgres não suporta RLS
+ * nela (Fase 6c). Uma tela autenticada lê `v_indicadores_recria` (filtra
+ * sozinha por `current_propriedade_id()`); um worker com service_role passa
+ * `propriedadeId` explicitamente e lê a matview crua com filtro manual.
+ */
 export async function buscarIndicadoresRecria(
   supabase: SupabaseClient,
   parametros: Parametros,
-  hoje: ISODate
+  hoje: ISODate,
+  propriedadeId?: string
 ): Promise<IndicadorRecriaLote[]> {
-  const { data } = await supabase.from("mv_indicadores_recria").select("*").eq("tipo_operacao", "recria");
+  let query = supabase
+    .from(propriedadeId ? "mv_indicadores_recria" : "v_indicadores_recria")
+    .select("*")
+    .eq("tipo_operacao", "recria");
+  if (propriedadeId) query = query.eq("propriedade_id", propriedadeId);
+  const { data } = await query;
 
   type LinhaRecria = {
     lote_id: string;

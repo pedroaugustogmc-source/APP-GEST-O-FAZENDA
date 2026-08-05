@@ -43,7 +43,28 @@ interface Snapshot {
   filaRevisaoPendente: number;
 }
 
-async function coletarSnapshot(supabase: SupabaseClient, parametros: Parametros, hoje: ISODate): Promise<Snapshot> {
+/**
+ * Fase 6c: `ctx` só é passado por quem chama com service_role (o worker
+ * `rotina-semanal`) — sem ele, o comportamento é o de antes da F6c (RLS
+ * escopa sozinha pra chamada autenticada de `/api/relatorios/gerar`).
+ */
+export interface ContextoRelatorio {
+  propriedadeId: string;
+  idsUsuarios: string[];
+}
+
+async function coletarSnapshot(supabase: SupabaseClient, parametros: Parametros, hoje: ISODate, ctx?: ContextoRelatorio): Promise<Snapshot> {
+  let queryLotes = supabase.from("lotes").select("cabecas_atuais").eq("status", "ativo");
+  let queryAlertas = supabase.from("alertas").select("tipo, severidade").is("resolvido_em", null);
+  let queryTarefas = supabase.from("tarefas").select("id", { count: "exact", head: true }).eq("status", "pendente");
+  let queryMensagens = supabase.from("mensagens_bot").select("id", { count: "exact", head: true }).in("status", ["revisao", "erro"]);
+  if (ctx) {
+    queryLotes = queryLotes.eq("propriedade_id", ctx.propriedadeId);
+    queryAlertas = queryAlertas.eq("propriedade_id", ctx.propriedadeId);
+    queryTarefas = queryTarefas.eq("propriedade_id", ctx.propriedadeId);
+    queryMensagens = queryMensagens.in("usuario_id", ctx.idsUsuarios);
+  }
+
   const [
     { data: lotesData },
     cria,
@@ -54,14 +75,14 @@ async function coletarSnapshot(supabase: SupabaseClient, parametros: Parametros,
     { count: tarefasPendentes },
     { count: filaRevisaoPendente },
   ] = await Promise.all([
-    supabase.from("lotes").select("cabecas_atuais").eq("status", "ativo"),
-    buscarIndicadoresCria(supabase, parametros, hoje),
-    buscarIndicadoresRecria(supabase, parametros, hoje),
-    supabase.from("alertas").select("tipo, severidade").is("resolvido_em", null),
-    buscarIndicadoresFinanceirosFazenda(supabase, parametros),
-    buscarPrecosMaisRecentes(supabase),
-    supabase.from("tarefas").select("id", { count: "exact", head: true }).eq("status", "pendente"),
-    supabase.from("mensagens_bot").select("id", { count: "exact", head: true }).in("status", ["revisao", "erro"]),
+    queryLotes,
+    buscarIndicadoresCria(supabase, parametros, hoje, ctx?.idsUsuarios),
+    buscarIndicadoresRecria(supabase, parametros, hoje, ctx?.propriedadeId),
+    queryAlertas,
+    buscarIndicadoresFinanceirosFazenda(supabase, parametros, ctx?.propriedadeId, ctx?.idsUsuarios),
+    buscarPrecosMaisRecentes(supabase, ctx?.idsUsuarios),
+    queryTarefas,
+    queryMensagens,
   ]);
 
   const cabecasTotais = ((lotesData ?? []) as Array<{ cabecas_atuais: number }>).reduce((t, l) => t + l.cabecas_atuais, 0);
@@ -103,8 +124,8 @@ function linhaOuSemDado(valor: number | null, formatar: (v: number) => string): 
 
 // docs/03-modulos.md M9.1: "sob demanda, rebanho, pastos, sanidade,
 // financeiro, máquinas, pendências."
-export async function montarRelatorioGeral(supabase: SupabaseClient, parametros: Parametros, hoje: ISODate): Promise<RelatorioMontado> {
-  const s = await coletarSnapshot(supabase, parametros, hoje);
+export async function montarRelatorioGeral(supabase: SupabaseClient, parametros: Parametros, hoje: ISODate, ctx?: ContextoRelatorio): Promise<RelatorioMontado> {
+  const s = await coletarSnapshot(supabase, parametros, hoje, ctx);
 
   const conteudoMd = `# Relatório geral da fazenda — ${hoje}
 
@@ -149,16 +170,19 @@ export async function montarRelatorioSemanal(
   supabase: SupabaseClient,
   parametros: Parametros,
   hoje: ISODate,
-  agendaSemanaSeguinte: Array<{ descricao: string; justificativa: string | null }>
+  agendaSemanaSeguinte: Array<{ descricao: string; justificativa: string | null }>,
+  ctx?: ContextoRelatorio
 ): Promise<RelatorioMontado> {
   const inicio = subtrairDias(hoje, 7);
-  const s = await coletarSnapshot(supabase, parametros, hoje);
+  const s = await coletarSnapshot(supabase, parametros, hoje, ctx);
 
-  const { count: gravadasNaSemana } = await supabase
+  let queryGravadas = supabase
     .from("mensagens_bot")
     .select("id", { count: "exact", head: true })
     .eq("status", "gravada")
     .gte("recebido_em", `${inicio}T00:00:00`);
+  if (ctx) queryGravadas = queryGravadas.in("usuario_id", ctx.idsUsuarios);
+  const { count: gravadasNaSemana } = await queryGravadas;
 
   const linhasAgenda = agendaSemanaSeguinte
     .map((t, i) => `${i + 1}. ${t.descricao}${t.justificativa ? ` — ${t.justificativa}` : ""}`)
@@ -196,19 +220,19 @@ ${linhasAgenda || "— sem dado — nenhuma tarefa priorizada ainda."}
 export async function montarRelatorioTrimestral(
   supabase: SupabaseClient,
   parametros: Parametros,
-  hoje: ISODate
+  hoje: ISODate,
+  ctx?: ContextoRelatorio
 ): Promise<RelatorioMontado> {
   const inicioTrimestre = inicioDoTrimestre(hoje);
-  const s = await coletarSnapshot(supabase, parametros, hoje);
+  const s = await coletarSnapshot(supabase, parametros, hoje, ctx);
 
-  const { data: trimestreAnterior } = await supabase
+  let queryTrimestreAnterior = supabase
     .from("relatorios")
     .select("indicadores, periodo_fim")
     .eq("tipo", "trimestral")
-    .lt("periodo_fim", inicioTrimestre)
-    .order("periodo_fim", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .lt("periodo_fim", inicioTrimestre);
+  if (ctx) queryTrimestreAnterior = queryTrimestreAnterior.eq("propriedade_id", ctx.propriedadeId);
+  const { data: trimestreAnterior } = await queryTrimestreAnterior.order("periodo_fim", { ascending: false }).limit(1).maybeSingle();
 
   const anterior = (trimestreAnterior?.indicadores ?? null) as Snapshot | null;
   const recomendacoes = anterior ? recomendacoesDoTrimestre(s, anterior) : [];

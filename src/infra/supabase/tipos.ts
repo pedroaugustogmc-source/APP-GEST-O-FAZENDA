@@ -190,6 +190,7 @@ export interface TarefaRow {
   calendar_event_id: string | null;
   registrado_por: string | null;
   registrado_em: string;
+  propriedade_id: string | null;
 }
 
 export interface ChecklistItemRow {
@@ -215,6 +216,7 @@ export interface RelatorioRow {
   conteudo_md: string;
   indicadores: Record<string, unknown> | null;
   gerado_em: string;
+  propriedade_id: string | null;
 }
 
 export interface InsumoRow {

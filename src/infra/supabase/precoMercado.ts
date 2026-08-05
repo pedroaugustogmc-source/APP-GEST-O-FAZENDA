@@ -22,14 +22,23 @@ export interface PrecoRecente {
   fonte: string;
 }
 
-/** Preço mais recente por tipo (precos_mercado não tem "vigente", é sempre a última entrada por data_referencia). */
+/**
+ * Preço mais recente por tipo (precos_mercado não tem "vigente", é sempre a
+ * última entrada por data_referencia). `idsUsuariosDaFazenda` só é
+ * necessário quando quem chama roda com service_role (workers) — RLS já
+ * escopa por fazenda pra qualquer chamada autenticada (Fase 6b, derivado via
+ * registrado_por), então uma tela normal não precisa passar nada.
+ */
 export async function buscarPrecosMaisRecentes(
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  idsUsuariosDaFazenda?: string[]
 ): Promise<Map<TipoPrecoMercadoDB, PrecoRecente>> {
-  const { data } = await supabase
+  let query = supabase
     .from("precos_mercado")
     .select("tipo, valor_centavos, data_referencia, fonte")
     .order("data_referencia", { ascending: false });
+  if (idsUsuariosDaFazenda) query = query.in("registrado_por", idsUsuariosDaFazenda);
+  const { data } = await query;
 
   const mapa = new Map<TipoPrecoMercadoDB, PrecoRecente>();
   for (const linha of (data ?? []) as Array<{

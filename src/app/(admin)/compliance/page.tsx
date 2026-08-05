@@ -91,7 +91,7 @@ export default async function PaginaCompliance({
 
   const [{ data: efetivoData }, { data: lotesSaidaData }, { data: pastosData }, { data: vacinasData }, { data: financeiroData }] =
     await Promise.all([
-      supabase.from("mv_efetivo_por_categoria").select("categoria, sexo, cabecas").order("categoria"),
+      supabase.from("v_efetivo_por_categoria").select("categoria, sexo, cabecas").order("categoria"),
       supabase
         .from("lotes")
         .select("id, nome, categoria, cabecas_atuais, status, data_saida")

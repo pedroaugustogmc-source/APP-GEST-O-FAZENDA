@@ -35,7 +35,7 @@ export default async function PaginaPastos() {
   const hoje = hojeEmFortaleza();
 
   const [{ data: lotacaoData }, parametros, { data: movimentacoes }, { data: chuvaData }] = await Promise.all([
-    supabase.from("mv_lotacao_por_pasto").select("*").order("pasto_nome"),
+    supabase.from("v_lotacao_por_pasto").select("*").order("pasto_nome"),
     buscarParametros(supabase),
     supabase
       .from("movimentacoes_pasto")

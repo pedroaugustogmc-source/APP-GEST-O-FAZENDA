@@ -34,9 +34,12 @@ export async function GET(request: Request) {
 
   const limiteTempo = new Date(Date.now() - MINUTOS_PARA_CONSIDERAR_TRAVADA * 60_000).toISOString();
 
+  // Fase 6c: precisa de propriedade_id pra gravar o alerta (agora escopado
+  // por fazenda) — mensagens_bot não tem a coluna direto (deriva via
+  // usuario_id, Grupo A da F6b), então busca via embed do FK.
   const { data: travadas, error } = await supabase
     .from("mensagens_bot")
-    .select("id, tentativas, erro, telefone_origem")
+    .select("id, tentativas, erro, telefone_origem, usuarios_acesso(propriedade_id)")
     .in("status", ["recebida", "transcrita"])
     .lt("recebido_em", limiteTempo);
 
@@ -44,7 +47,13 @@ export async function GET(request: Request) {
 
   let marcadas = 0;
 
-  for (const mensagem of travadas ?? []) {
+  for (const mensagem of (travadas ?? []) as Array<{
+    id: string;
+    tentativas: number;
+    erro: string | null;
+    telefone_origem: string;
+    usuarios_acesso: { propriedade_id: string } | { propriedade_id: string }[] | null;
+  }>) {
     await supabase
       .from("mensagens_bot")
       .update({
@@ -53,15 +62,22 @@ export async function GET(request: Request) {
       })
       .eq("id", mensagem.id);
 
-    await supabase.from("alertas").insert({
-      tipo: "mensagem_bot_travada",
-      severidade: "atencao",
-      entidade_tipo: "mensagens_bot",
-      entidade_id: mensagem.id,
-      titulo: "Mensagem do bot não foi processada",
-      mensagem: `Mensagem de ${mensagem.telefone_origem} (${mensagem.tentativas} tentativa(s)) ficou presa e virou erro. Peça pro trabalhador mandar de novo.`,
-      acao_sugerida: "Confirme com o trabalhador se ele pode reenviar a mensagem.",
-    });
+    const propriedadeId = Array.isArray(mensagem.usuarios_acesso)
+      ? mensagem.usuarios_acesso[0]?.propriedade_id
+      : mensagem.usuarios_acesso?.propriedade_id;
+
+    if (propriedadeId) {
+      await supabase.from("alertas").insert({
+        tipo: "mensagem_bot_travada",
+        severidade: "atencao",
+        entidade_tipo: "mensagens_bot",
+        entidade_id: mensagem.id,
+        titulo: "Mensagem do bot não foi processada",
+        mensagem: `Mensagem de ${mensagem.telefone_origem} (${mensagem.tentativas} tentativa(s)) ficou presa e virou erro. Peça pro trabalhador mandar de novo.`,
+        acao_sugerida: "Confirme com o trabalhador se ele pode reenviar a mensagem.",
+        propriedade_id: propriedadeId,
+      });
+    }
 
     marcadas += 1;
   }

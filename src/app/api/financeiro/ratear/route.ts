@@ -63,7 +63,7 @@ export async function POST(request: Request) {
 
   const [{ data: lotesData }, { data: pesosData }] = await Promise.all([
     supabase.from("lotes").select("id, nome, tipo_operacao, cabecas_atuais, peso_entrada, data_entrada").eq("status", "ativo"),
-    supabase.from("mv_indicadores_recria").select("lote_id, peso_ultima_kg"),
+    supabase.from("v_indicadores_recria").select("lote_id, peso_ultima_kg"),
   ]);
 
   type LinhaLote = {

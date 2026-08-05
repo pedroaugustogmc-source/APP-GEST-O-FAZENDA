@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { criarClienteServico } from "@/infra/supabase/server";
 import { buscarParametros } from "@/infra/supabase/parametros";
 import { sincronizarAlertas, type OfensorAlerta } from "@/infra/alertas";
+import { listarPropriedades, construirContextoFazenda, type ContextoFazenda } from "@/infra/supabase/propriedades";
 import { avaliarLotacao } from "@/domain/calculos/avaliarLotacao";
 import { diasDeDescanso } from "@/domain/calculos/diasDeDescanso";
 import { gmd } from "@/domain/calculos/gmd";
@@ -22,6 +23,13 @@ import type { Parametros, ISODate } from "@/domain/tipos";
 // mensagem_em_revisao (a fila de revisão já mostra a contagem direto,
 // F2) — fora do escopo declarado em ESTADO.md. Job diário (cron);
 // dedup/auto-resolução em src/infra/alertas.ts.
+//
+// Fase 6c: roda com service_role, que ignora RLS por completo — sem laço
+// por fazenda, alertas de todas as propriedades ficariam misturados (ou
+// pior, um alerta de custo/vacina de uma fazenda seria "resolvido" só
+// porque a condição não existe mais em OUTRA fazenda). Cada sub-função
+// recebe o `ContextoFazenda` da iteração e filtra manualmente as tabelas
+// que não têm RLS pra service_role (ver src/infra/supabase/propriedades.ts).
 export async function GET(request: Request) {
   const segredoConfigurado = process.env.CRON_SECRET;
   const segredoRecebido = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
@@ -33,18 +41,26 @@ export async function GET(request: Request) {
   const parametros = await buscarParametros(supabase);
   const hoje = hojeEmFortaleza();
 
-  const resultado: Record<string, number> = {};
+  const propriedades = await listarPropriedades(supabase);
+  const porFazenda: Record<string, Record<string, number>> = {};
 
-  resultado.superlotacao_e_descanso = await gerarAlertasDePasto(supabase, parametros);
-  resultado.vacinas = await gerarAlertasDeVacina(supabase, hoje);
-  resultado.gmd_e_dado_velho = await gerarAlertasDeRecria(supabase, parametros, hoje);
-  resultado.mortalidade = await gerarAlertaDeMortalidade(supabase, hoje);
-  resultado.sincronizacao = await gerarAlertaDeSincronizacao(supabase, parametros, hoje);
-  resultado.custo_acima_breakeven = await gerarAlertaDeCustoAcimaBreakeven(supabase, parametros);
-  resultado.manutencao = await gerarAlertasDeManutencao(supabase, parametros);
-  resultado.insumos = await gerarAlertasDeInsumo(supabase, parametros, hoje);
+  for (const propriedade of propriedades) {
+    const ctx = await construirContextoFazenda(supabase, propriedade);
+    const resultado: Record<string, number> = {};
 
-  return NextResponse.json({ gerado_em: new Date().toISOString(), alertas_avaliados: resultado });
+    resultado.superlotacao_e_descanso = await gerarAlertasDePasto(supabase, parametros, ctx);
+    resultado.vacinas = await gerarAlertasDeVacina(supabase, hoje, ctx);
+    resultado.gmd_e_dado_velho = await gerarAlertasDeRecria(supabase, parametros, hoje, ctx);
+    resultado.mortalidade = await gerarAlertaDeMortalidade(supabase, hoje, ctx);
+    resultado.sincronizacao = await gerarAlertaDeSincronizacao(supabase, parametros, hoje, ctx);
+    resultado.custo_acima_breakeven = await gerarAlertaDeCustoAcimaBreakeven(supabase, parametros, ctx);
+    resultado.manutencao = await gerarAlertasDeManutencao(supabase, parametros, ctx);
+    resultado.insumos = await gerarAlertasDeInsumo(supabase, parametros, hoje, ctx);
+
+    porFazenda[propriedade.nome] = resultado;
+  }
+
+  return NextResponse.json({ gerado_em: new Date().toISOString(), fazendas: porFazenda });
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -65,8 +81,8 @@ interface LinhaLotacao {
   peso_medio_kg: number | null;
 }
 
-async function gerarAlertasDePasto(supabase: Supa, parametros: Parametros): Promise<number> {
-  const { data } = await supabase.from("mv_lotacao_por_pasto").select("*");
+async function gerarAlertasDePasto(supabase: Supa, parametros: Parametros, ctx: ContextoFazenda): Promise<number> {
+  const { data } = await supabase.from("mv_lotacao_por_pasto").select("*").eq("propriedade_id", ctx.propriedadeId);
   const linhas = (data ?? []) as LinhaLotacao[];
 
   const pastosEmDescanso = linhas.filter((l) => l.pasto_status === "descanso");
@@ -114,9 +130,9 @@ async function gerarAlertasDePasto(supabase: Supa, parametros: Parametros): Prom
     }
   }
 
-  await sincronizarAlertas(supabase, "superlotacao", "pastos", ofensoresSuperlotacao);
-  await sincronizarAlertas(supabase, "descanso_insuficiente", "pastos", ofensoresDescansoInsuficiente);
-  await sincronizarAlertas(supabase, "acude_baixo", "pastos", ofensoresAcudeBaixo);
+  await sincronizarAlertas(supabase, "superlotacao", "pastos", ofensoresSuperlotacao, ctx.propriedadeId);
+  await sincronizarAlertas(supabase, "descanso_insuficiente", "pastos", ofensoresDescansoInsuficiente, ctx.propriedadeId);
+  await sincronizarAlertas(supabase, "acude_baixo", "pastos", ofensoresAcudeBaixo, ctx.propriedadeId);
   return ofensoresSuperlotacao.length + ofensoresDescansoInsuficiente.length + ofensoresAcudeBaixo.length;
 }
 
@@ -127,11 +143,17 @@ function sugerirPastoDestino(pastosEmDescanso: LinhaLotacao[], excetoPastoId: st
   return candidatos[0]?.pasto_nome ?? null;
 }
 
-async function gerarAlertasDeVacina(supabase: Supa, hoje: ISODate): Promise<number> {
+async function gerarAlertasDeVacina(supabase: Supa, hoje: ISODate, ctx: ContextoFazenda): Promise<number> {
   const [{ data: catalogo }, { data: animais }, { data: aplicadas }] = await Promise.all([
+    // vacinas_catalogo é global por decisão (ESTADO.md F6b) — mesmo protocolo pra todas as fazendas.
     supabase.from("vacinas_catalogo").select("*").eq("ativo", true).eq("bloqueada", false),
-    supabase.from("animais").select("id, sexo, categoria, data_nascimento").eq("status", "ativo").is("deletado_em", null),
-    supabase.from("vacinas_aplicadas").select("vacina_id, animal_id").not("animal_id", "is", null),
+    supabase
+      .from("animais")
+      .select("id, sexo, categoria, data_nascimento")
+      .eq("status", "ativo")
+      .is("deletado_em", null)
+      .in("registrado_por", ctx.idsUsuarios),
+    supabase.from("vacinas_aplicadas").select("vacina_id, animal_id").not("animal_id", "is", null).in("registrado_por", ctx.idsUsuarios),
   ]);
 
   const animaisAtivos = (animais ?? []) as AnimalParaVacina[];
@@ -181,8 +203,8 @@ async function gerarAlertasDeVacina(supabase: Supa, hoje: ISODate): Promise<numb
     }
   }
 
-  await sincronizarAlertas(supabase, "vacina_janela_abrindo", "vacinas_catalogo", ofensoresJanela);
-  await sincronizarAlertas(supabase, "vacina_atrasada", "vacinas_catalogo", ofensoresAtrasada);
+  await sincronizarAlertas(supabase, "vacina_janela_abrindo", "vacinas_catalogo", ofensoresJanela, ctx.propriedadeId);
+  await sincronizarAlertas(supabase, "vacina_atrasada", "vacinas_catalogo", ofensoresAtrasada, ctx.propriedadeId);
   return ofensoresJanela.length + ofensoresAtrasada.length;
 }
 
@@ -195,8 +217,8 @@ interface LinhaRecria {
   peso_penultima_data: ISODate | null;
 }
 
-async function gerarAlertasDeRecria(supabase: Supa, parametros: Parametros, hoje: ISODate): Promise<number> {
-  const { data } = await supabase.from("mv_indicadores_recria").select("*");
+async function gerarAlertasDeRecria(supabase: Supa, parametros: Parametros, hoje: ISODate, ctx: ContextoFazenda): Promise<number> {
+  const { data } = await supabase.from("mv_indicadores_recria").select("*").eq("propriedade_id", ctx.propriedadeId);
   const linhas = (data ?? []) as LinhaRecria[];
 
   const ofensoresGmd: OfensorAlerta[] = [];
@@ -229,14 +251,19 @@ async function gerarAlertasDeRecria(supabase: Supa, parametros: Parametros, hoje
     }
   }
 
-  await sincronizarAlertas(supabase, "gmd_abaixo_meta", "lotes", ofensoresGmd);
-  await sincronizarAlertas(supabase, "dado_velho", "lotes", ofensoresDadoVelho);
+  await sincronizarAlertas(supabase, "gmd_abaixo_meta", "lotes", ofensoresGmd, ctx.propriedadeId);
+  await sincronizarAlertas(supabase, "dado_velho", "lotes", ofensoresDadoVelho, ctx.propriedadeId);
   return ofensoresGmd.length + ofensoresDadoVelho.length;
 }
 
-async function gerarAlertaDeMortalidade(supabase: Supa, hoje: ISODate): Promise<number> {
+async function gerarAlertaDeMortalidade(supabase: Supa, hoje: ISODate, ctx: ContextoFazenda): Promise<number> {
   const seiMesesAtras = somarMeses(hoje, -6);
-  const { data } = await supabase.from("mortalidade").select("data, cabecas").gte("data", seiMesesAtras).lte("data", hoje);
+  const { data } = await supabase
+    .from("mortalidade")
+    .select("data, cabecas")
+    .gte("data", seiMesesAtras)
+    .lte("data", hoje)
+    .in("registrado_por", ctx.idsUsuarios);
 
   const porMes = new Map<string, number>();
   for (const linha of (data ?? []) as Array<{ data: ISODate; cabecas: number }>) {
@@ -265,16 +292,17 @@ async function gerarAlertaDeMortalidade(supabase: Supa, hoje: ISODate): Promise<
         ]
       : [];
 
-  await sincronizarAlertas(supabase, "mortalidade_anormal", "propriedade", ofensores);
+  await sincronizarAlertas(supabase, "mortalidade_anormal", "propriedade", ofensores, ctx.propriedadeId);
   return ofensores.length;
 }
 
-async function gerarAlertaDeSincronizacao(supabase: Supa, parametros: Parametros, hoje: ISODate): Promise<number> {
+async function gerarAlertaDeSincronizacao(supabase: Supa, parametros: Parametros, hoje: ISODate, ctx: ContextoFazenda): Promise<number> {
   const { data: trabalhadores } = await supabase
     .from("usuarios_acesso")
     .select("id, nome")
     .eq("papel", "trabalhador")
-    .eq("status", "ativo");
+    .eq("status", "ativo")
+    .eq("propriedade_id", ctx.propriedadeId);
 
   const limite = parametros.DIAS_SEM_MENSAGEM_ALERTA ?? 7;
   const ofensores: OfensorAlerta[] = [];
@@ -300,15 +328,21 @@ async function gerarAlertaDeSincronizacao(supabase: Supa, parametros: Parametros
     }
   }
 
-  await sincronizarAlertas(supabase, "sincronizacao_parada", "usuarios_acesso", ofensores);
+  await sincronizarAlertas(supabase, "sincronizacao_parada", "usuarios_acesso", ofensores, ctx.propriedadeId);
   return ofensores.length;
 }
 
-async function gerarAlertaDeCustoAcimaBreakeven(supabase: Supa, parametros: Parametros): Promise<number> {
+async function gerarAlertaDeCustoAcimaBreakeven(supabase: Supa, parametros: Parametros, ctx: ContextoFazenda): Promise<number> {
   const [{ data: lotesRecria }, { data: financeiroData }, precoMaisRecentePorTipo] = await Promise.all([
-    supabase.from("mv_indicadores_recria").select("*").eq("tipo_operacao", "recria"),
-    supabase.from("financeiro").select("lote_id, valor_centavos").eq("tipo", "custo").is("deletado_em", null).not("lote_id", "is", null),
-    buscarPrecosMaisRecentes(supabase),
+    supabase.from("mv_indicadores_recria").select("*").eq("tipo_operacao", "recria").eq("propriedade_id", ctx.propriedadeId),
+    supabase
+      .from("financeiro")
+      .select("lote_id, valor_centavos")
+      .eq("tipo", "custo")
+      .is("deletado_em", null)
+      .not("lote_id", "is", null)
+      .eq("propriedade_id", ctx.propriedadeId),
+    buscarPrecosMaisRecentes(supabase, ctx.idsUsuarios),
   ]);
 
   const custoPorLote = new Map<string, bigint>();
@@ -343,7 +377,7 @@ async function gerarAlertaDeCustoAcimaBreakeven(supabase: Supa, parametros: Para
     }
   }
 
-  await sincronizarAlertas(supabase, "custo_acima_breakeven", "lotes", ofensores);
+  await sincronizarAlertas(supabase, "custo_acima_breakeven", "lotes", ofensores, ctx.propriedadeId);
   return ofensores.length;
 }
 
@@ -352,10 +386,17 @@ async function gerarAlertaDeCustoAcimaBreakeven(supabase: Supa, parametros: Para
 // avalia máquina com uma manutenção registrada com `proxima_em_horas` —
 // sem isso não há base pra afirmar urgência nenhuma (CLAUDE.md regra 2),
 // mesmo raciocínio de avaliarManutencao(..., null, ...) → "ok".
-async function gerarAlertasDeManutencao(supabase: Supa, parametros: Parametros): Promise<number> {
+async function gerarAlertasDeManutencao(supabase: Supa, parametros: Parametros, ctx: ContextoFazenda): Promise<number> {
   const [{ data: maquinasData }, { data: manutencoesData }] = await Promise.all([
-    supabase.from("maquinas").select("id, nome, horas_uso_total").neq("status", "vendida"),
-    supabase.from("manutencoes").select("maquina_id, proxima_em_horas, data").not("proxima_em_horas", "is", null).order("data", { ascending: false }),
+    supabase.from("maquinas").select("id, nome, horas_uso_total").neq("status", "vendida").eq("propriedade_id", ctx.propriedadeId),
+    ctx.idsMaquinas.length > 0
+      ? supabase
+          .from("manutencoes")
+          .select("maquina_id, proxima_em_horas, data")
+          .not("proxima_em_horas", "is", null)
+          .in("maquina_id", ctx.idsMaquinas)
+          .order("data", { ascending: false })
+      : Promise.resolve({ data: [] }),
   ]);
 
   const proximaPorMaquina = new Map<string, number>();
@@ -390,15 +431,18 @@ async function gerarAlertasDeManutencao(supabase: Supa, parametros: Parametros):
     }
   }
 
-  await sincronizarAlertas(supabase, "manutencao_vencida", "maquinas", ofensoresVencida);
-  await sincronizarAlertas(supabase, "manutencao_proxima", "maquinas", ofensoresProxima);
+  await sincronizarAlertas(supabase, "manutencao_vencida", "maquinas", ofensoresVencida, ctx.propriedadeId);
+  await sincronizarAlertas(supabase, "manutencao_proxima", "maquinas", ofensoresProxima, ctx.propriedadeId);
   return ofensoresVencida.length + ofensoresProxima.length;
 }
 
 // docs/01-dominio.md §12: estoque_minimo (quantidade < mínimo) /
 // insumo_vencendo (validade dentro de DIAS_INSUMO_VENCENDO).
-async function gerarAlertasDeInsumo(supabase: Supa, parametros: Parametros, hoje: ISODate): Promise<number> {
-  const { data } = await supabase.from("estoque_insumos").select("id, insumo, quantidade, minimo_alerta, validade");
+async function gerarAlertasDeInsumo(supabase: Supa, parametros: Parametros, hoje: ISODate, ctx: ContextoFazenda): Promise<number> {
+  const { data } = await supabase
+    .from("estoque_insumos")
+    .select("id, insumo, quantidade, minimo_alerta, validade")
+    .eq("propriedade_id", ctx.propriedadeId);
   const linhas = (data ?? []) as Array<{ id: string; insumo: string; quantidade: number; minimo_alerta: number; validade: ISODate | null }>;
 
   const diasVencendo = parametros.DIAS_INSUMO_VENCENDO ?? 30;
@@ -427,8 +471,8 @@ async function gerarAlertasDeInsumo(supabase: Supa, parametros: Parametros, hoje
     }
   }
 
-  await sincronizarAlertas(supabase, "estoque_minimo", "estoque_insumos", ofensoresEstoque);
-  await sincronizarAlertas(supabase, "insumo_vencendo", "estoque_insumos", ofensoresValidade);
+  await sincronizarAlertas(supabase, "estoque_minimo", "estoque_insumos", ofensoresEstoque, ctx.propriedadeId);
+  await sincronizarAlertas(supabase, "insumo_vencendo", "estoque_insumos", ofensoresValidade, ctx.propriedadeId);
   return ofensoresEstoque.length + ofensoresValidade.length;
 }
 

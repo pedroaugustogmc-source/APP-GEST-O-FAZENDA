@@ -14,6 +14,13 @@ export async function POST() {
   const { data: sessao } = await supabase.auth.getUser();
   if (!sessao.user) return NextResponse.json({ erro: "Sessão inválida." }, { status: 401 });
 
+  const { data: quemChama } = await supabase
+    .from("usuarios_acesso")
+    .select("propriedade_id")
+    .eq("auth_user_id", sessao.user.id)
+    .single();
+  if (!quemChama?.propriedade_id) return NextResponse.json({ erro: "Usuário logado ainda não está vinculado a uma propriedade." }, { status: 401 });
+
   const parametros = await buscarParametros(supabase);
   const hoje = hojeEmFortaleza();
   const relatorio = await montarRelatorioGeral(supabase, parametros, hoje);
@@ -26,6 +33,7 @@ export async function POST() {
       periodo_fim: relatorio.periodoFim,
       conteudo_md: relatorio.conteudoMd,
       indicadores: relatorio.indicadores,
+      propriedade_id: quemChama.propriedade_id,
     })
     .select("id")
     .single();

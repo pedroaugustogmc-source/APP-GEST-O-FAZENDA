@@ -29,7 +29,7 @@ export async function buscarLotesParaSimulacao(
 ): Promise<LoteParaSimulacao[]> {
   const [{ data: lotesData }, { data: indicadoresData }, { data: financeiroData }, precoMaisRecentePorTipo] = await Promise.all([
     supabase.from("lotes").select("id, nome, categoria, data_entrada").eq("status", "ativo").eq("tipo_operacao", "recria").order("nome"),
-    supabase.from("mv_indicadores_recria").select("lote_id, peso_ultima_kg, peso_ultima_data, peso_penultima_kg, peso_penultima_data"),
+    supabase.from("v_indicadores_recria").select("lote_id, peso_ultima_kg, peso_ultima_data, peso_penultima_kg, peso_penultima_data"),
     supabase.from("financeiro").select("lote_id, valor_centavos").eq("tipo", "custo").is("deletado_em", null).not("lote_id", "is", null),
     buscarPrecosMaisRecentes(supabase),
   ]);

@@ -37,7 +37,7 @@ export default async function PaginaInicial() {
     { data: tarefasPrioritarias },
   ] = await Promise.all([
     supabase.from("lotes").select("cabecas_atuais").eq("status", "ativo"),
-    supabase.from("mv_lotacao_por_pasto").select("*"),
+    supabase.from("v_lotacao_por_pasto").select("*"),
     supabase
       .from("alertas")
       .select("id, tipo, severidade, titulo, mensagem, gerado_em")

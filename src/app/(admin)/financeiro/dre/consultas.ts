@@ -41,7 +41,7 @@ export interface LinhaDre {
 export async function buscarDrePorLote(supabase: SupabaseClient, parametros: Parametros, hoje: ISODate): Promise<LinhaDre[]> {
   const [{ data: lotesData }, { data: pesosData }, { data: financeiroData }, precoMaisRecentePorTipo] = await Promise.all([
     supabase.from("lotes").select("id, nome, categoria, tipo_operacao, cabecas_atuais, peso_entrada, data_entrada").eq("status", "ativo").order("nome"),
-    supabase.from("mv_indicadores_recria").select("lote_id, peso_ultima_kg"),
+    supabase.from("v_indicadores_recria").select("lote_id, peso_ultima_kg"),
     supabase
       .from("financeiro")
       .select("lote_id, valor_centavos, centro_custo")

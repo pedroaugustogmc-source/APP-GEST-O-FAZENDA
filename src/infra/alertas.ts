@@ -23,12 +23,14 @@ export async function sincronizarAlertas(
   supabase: SupabaseClient,
   tipo: string,
   entidadeTipo: string | null,
-  ofensores: OfensorAlerta[]
+  ofensores: OfensorAlerta[],
+  propriedadeId: string
 ): Promise<void> {
   const { data: abertos } = await supabase
     .from("alertas")
     .select("id, entidade_id")
     .eq("tipo", tipo)
+    .eq("propriedade_id", propriedadeId)
     .is("resolvido_em", null);
 
   const idsAbertos = new Map<string, string>(
@@ -49,6 +51,7 @@ export async function sincronizarAlertas(
       mensagem: ofensor.mensagem,
       acao_sugerida: ofensor.acaoSugerida ?? null,
       dados: ofensor.dados ?? null,
+      propriedade_id: propriedadeId,
     });
   }
 
