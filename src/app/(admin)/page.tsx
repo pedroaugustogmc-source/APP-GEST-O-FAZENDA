@@ -14,6 +14,8 @@ import type { Centavos, ISODate } from "@/domain/tipos";
 
 export const dynamic = "force-dynamic";
 
+const SEM_DADO = "Sem dado";
+
 // docs/03-modulos.md M10 — "uma tela, no celular, que responde em 10
 // segundos: como está a fazenda hoje?". Regra de ouro: nenhum número aparece
 // sem data e sem origem; custo/@, ponto de equilíbrio, margem e caixa vêm de
@@ -120,13 +122,13 @@ export default async function PaginaInicial() {
         <NumeroGrande
           icone={Wallet}
           titulo="Custo por @"
-          valor={indicadoresFinanceiros.custoPorArroba.valor !== null ? `${formatarCentavos(indicadoresFinanceiros.custoPorArroba.valor)}/@` : "— sem dado —"}
+          valor={indicadoresFinanceiros.custoPorArroba.valor !== null ? `${formatarCentavos(indicadoresFinanceiros.custoPorArroba.valor)}/@` : SEM_DADO}
           nota={indicadoresFinanceiros.custoPorArroba.motivo ?? `atualizado ${hoje}`}
         />
         <NumeroGrande
           icone={Scale}
           titulo="Ponto de equilíbrio vs mercado"
-          valor={distanciaMercado !== null ? `${distanciaMercado >= 0 ? "+" : ""}${(distanciaMercado * 100).toFixed(1)}%` : "— sem dado —"}
+          valor={distanciaMercado !== null ? `${distanciaMercado >= 0 ? "+" : ""}${(distanciaMercado * 100).toFixed(1)}%` : SEM_DADO}
           nota={
             distanciaMercado !== null
               ? `PE ${formatarCentavos(indicadoresFinanceiros.pontoEquilibrio.valor)}/@ · mercado ${formatarCentavos(precoBoi!.valorCentavos)}/@`
@@ -139,7 +141,7 @@ export default async function PaginaInicial() {
         <NumeroGrande
           icone={TrendingUp}
           titulo="Margem projetada"
-          valor={indicadoresFinanceiros.margemProjetada !== null ? formatarCentavos(indicadoresFinanceiros.margemProjetada) : "— sem dado —"}
+          valor={indicadoresFinanceiros.margemProjetada !== null ? formatarCentavos(indicadoresFinanceiros.margemProjetada) : SEM_DADO}
           nota={indicadoresFinanceiros.margemProjetada !== null ? `sobre ${indicadoresFinanceiros.arrobasTotal.toFixed(1)} arroba(s) hoje` : "sem preço de mercado para nenhuma categoria de lote"}
           inverso={indicadoresFinanceiros.margemProjetada !== null && indicadoresFinanceiros.margemProjetada < 0n}
         />
@@ -147,7 +149,7 @@ export default async function PaginaInicial() {
         <NumeroGrande
           icone={Banknote}
           titulo="Caixa do mês"
-          valor={temLancamentoNoMes ? formatarCentavos(caixaMes) : "— sem dado —"}
+          valor={temLancamentoNoMes ? formatarCentavos(caixaMes) : SEM_DADO}
           nota={temLancamentoNoMes ? `receita − custo desde ${inicioMes}` : "nenhum lançamento neste mês"}
           inverso={temLancamentoNoMes && caixaMes < 0n}
         />
@@ -202,7 +204,7 @@ export default async function PaginaInicial() {
           ))}
           {(!tarefasPrioritarias || tarefasPrioritarias.length === 0) && (
             <p className="text-muted-foreground">
-              — sem dado — nenhuma tarefa pendente ainda; a rotina semanal gera a agenda automaticamente.
+              <span className="italic">Sem dado</span> — nenhuma tarefa pendente ainda; a rotina semanal gera a agenda automaticamente.
             </p>
           )}
           <Link href="/tarefas" className="text-sm font-medium text-primary hover:underline">
@@ -219,7 +221,7 @@ export default async function PaginaInicial() {
           {((mensagensRecentes ?? []) as Array<{ id: string; transcricao: string | null; status: string; recebido_em: string }>).map(
             (mensagem) => (
               <div key={mensagem.id} className="flex items-center justify-between gap-2 border-b border-border pb-2 last:border-0">
-                <span className="truncate text-foreground">{mensagem.transcricao ?? "— sem dado —"}</span>
+                <span className="truncate text-foreground">{mensagem.transcricao ?? <span className="italic text-muted-foreground">Sem dado</span>}</span>
                 <div className="flex shrink-0 items-center gap-2 text-muted-foreground">
                   <Badge variant={mensagem.status === "gravada" ? "default" : "outline"}>{mensagem.status}</Badge>
                   <span>{new Date(mensagem.recebido_em).toLocaleTimeString("pt-BR")}</span>
@@ -263,7 +265,11 @@ function NumeroGrande({
         </span>
       </CardHeader>
       <CardContent>
-        <p className={`text-numero-grande ${destaque ? "text-primary" : inverso ? "text-critico" : "text-foreground"}`}>{valor}</p>
+        {valor === SEM_DADO ? (
+          <p className="py-1 text-lg font-medium italic text-muted-foreground">{SEM_DADO}</p>
+        ) : (
+          <p className={`text-numero-grande ${destaque ? "text-primary" : inverso ? "text-critico" : "text-foreground"}`}>{valor}</p>
+        )}
         <p className="text-xs text-muted-foreground">{nota}</p>
       </CardContent>
     </Card>
