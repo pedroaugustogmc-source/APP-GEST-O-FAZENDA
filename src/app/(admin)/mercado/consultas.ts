@@ -33,6 +33,7 @@ export interface SeriePreco {
   desatualizado: boolean;
   variacaoSemanalPct: number | null;
   variacaoMensalPct: number | null;
+  variacaoQuinzenalPct: number | null;
   historico: Array<{ dataReferencia: ISODate; valorCentavos: Centavos }>;
 }
 
@@ -40,7 +41,10 @@ export interface SeriePreco {
 // mensal... Preço com mais de 7 dias aparece marcado como desatualizado."
 // Uma linha por tipo (o preço mais recente), com a variação contra a
 // entrada mais próxima de 7/30 dias atrás — "— sem dado —" honesto quando
-// não há histórico velho o bastante pra comparar (§9).
+// não há histórico velho o bastante pra comparar (§9). variacaoQuinzenalPct
+// (15 dias) alimenta a tendência de mercado (classificarTendencia) — é
+// recalculada a cada carregamento da tela a partir do histórico real, nunca
+// armazenada em cache, então não existe "job de atualização" separado.
 export async function buscarSeriesPrecos(supabase: SupabaseClient, parametros: Parametros, hoje: ISODate): Promise<SeriePreco[]> {
   const { data } = await supabase
     .from("precos_mercado")
@@ -60,6 +64,7 @@ export async function buscarSeriesPrecos(supabase: SupabaseClient, parametros: P
 
   const diasDesatualizado = parametros.DIAS_PRECO_MERCADO_DESATUALIZADO ?? 7;
   const dataSemanaAtras = subtrairDias(hoje, 7);
+  const dataQuinzenaAtras = subtrairDias(hoje, 15);
   const dataMesAtras = subtrairDias(hoje, 30);
 
   const resultado: SeriePreco[] = [];
@@ -67,6 +72,7 @@ export async function buscarSeriesPrecos(supabase: SupabaseClient, parametros: P
     // já vem ordenado desc por data_referencia (a query buscou assim).
     const maisRecente = entradas[0]!;
     const entradaSemana = encontrarMaisProximaAntesDe(entradas, dataSemanaAtras);
+    const entradaQuinzena = encontrarMaisProximaAntesDe(entradas, dataQuinzenaAtras);
     const entradaMes = encontrarMaisProximaAntesDe(entradas, dataMesAtras);
 
     resultado.push({
@@ -78,6 +84,7 @@ export async function buscarSeriesPrecos(supabase: SupabaseClient, parametros: P
       desatualizado: diasEntre(maisRecente.data_referencia, hoje) > diasDesatualizado,
       variacaoSemanalPct: entradaSemana ? variacaoPct(entradaSemana.valor_centavos, maisRecente.valor_centavos) : null,
       variacaoMensalPct: entradaMes ? variacaoPct(entradaMes.valor_centavos, maisRecente.valor_centavos) : null,
+      variacaoQuinzenalPct: entradaQuinzena ? variacaoPct(entradaQuinzena.valor_centavos, maisRecente.valor_centavos) : null,
       historico: entradas
         .slice()
         .reverse()

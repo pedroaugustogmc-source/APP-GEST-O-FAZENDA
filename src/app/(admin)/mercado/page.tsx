@@ -1,3 +1,4 @@
+import { TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { criarClienteServidor } from "@/infra/supabase/server";
 import { buscarParametros } from "@/infra/supabase/parametros";
 import { hojeEmFortaleza } from "@/domain/tipos/data";
@@ -9,6 +10,8 @@ import { decisaoMercado, type Decisao } from "@/domain/calculos/decisaoMercado";
 import { relacaoTroca } from "@/domain/calculos/relacaoTroca";
 import { arrobasCarcaca } from "@/domain/calculos/arrobasCarcaca";
 import { receitaProjetadaVenda } from "@/domain/calculos/receitaProjetadaVenda";
+import { classificarTendencia, type Tendencia } from "@/domain/calculos/classificarTendencia";
+import type { Parametros } from "@/domain/tipos";
 import { calcularPontoEquilibrioFazenda, buscarSeriesPrecos, type SeriePreco } from "./consultas";
 import { FormularioPrecoMercado } from "./formulario";
 
@@ -26,6 +29,17 @@ const ROTULOS_TIPO: Record<string, string> = {
 };
 
 const ROTULOS_DECISAO: Record<Decisao, string> = { comprar: "COMPRAR", vender: "VENDER", segurar: "SEGURAR" };
+
+const ROTULOS_TENDENCIA: Record<Tendencia, string> = { alta: "Alta", baixa: "Baixa", estavel: "Estável" };
+
+// docs/03-modulos.md M6 — tendência de mercado (15 dias): só as 4 categorias
+// que o dono acompanha pra decisão semanal de comprar/vender/segurar.
+const CATEGORIAS_TENDENCIA: Array<{ tipo: string; rotulo: string }> = [
+  { tipo: "arroba_boi", rotulo: "Boi" },
+  { tipo: "arroba_vaca", rotulo: "Vaca" },
+  { tipo: "bezerro", rotulo: "Bezerro" },
+  { tipo: "bezerra", rotulo: "Bezerra" },
+];
 
 // docs/03-modulos.md M6 — Inteligência de mercado: preços por categoria
 // (sempre com fonte + data), série com variação semanal/mensal, decisão
@@ -106,6 +120,22 @@ export default async function PaginaMercado() {
 
       <Card>
         <CardHeader>
+          <CardTitle className="text-base">Tendência de mercado (15 dias)</CardTitle>
+          <CardDescription>
+            Leitura do histórico já registrado, não previsão — compara o preço de hoje com o de 15 dias atrás em
+            cada categoria. Recalculada sozinha a cada carregamento da tela.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          {CATEGORIAS_TENDENCIA.map(({ tipo, rotulo }) => {
+            const serie = series.find((s) => s.tipo === tipo) ?? null;
+            return <CartaoTendencia key={tipo} rotulo={rotulo} serie={serie} parametros={parametros} />;
+          })}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle className="text-base">Relação de troca (bezerro ↔ boi gordo)</CardTitle>
           <CardDescription>
             Quantos bezerros equivalem a um boi gordo de {parametros.PESO_REFERENCIA_BOI_GORDO_KG ?? 500} kg — indicador
@@ -161,6 +191,33 @@ function CartaoPreco({ serie }: { serie: SeriePreco }) {
         {serie.historico.length > 1 && <Sparkline historico={serie.historico} />}
       </CardContent>
     </Card>
+  );
+}
+
+function CartaoTendencia({ rotulo, serie, parametros }: { rotulo: string; serie: SeriePreco | null; parametros: Parametros }) {
+  const pct = serie?.variacaoQuinzenalPct ?? null;
+  const tendencia = pct !== null ? classificarTendencia(pct, parametros) : null;
+
+  const Icone = tendencia === "alta" ? TrendingUp : tendencia === "baixa" ? TrendingDown : Minus;
+  const cor =
+    tendencia === "alta" ? "text-primary" : tendencia === "baixa" ? "text-critico" : "text-muted-foreground";
+
+  return (
+    <div className="flex flex-col items-center gap-1 rounded-lg border border-border p-3 text-center">
+      <p className="text-xs text-muted-foreground">{rotulo}</p>
+      {tendencia !== null && pct !== null ? (
+        <>
+          <Icone className={`h-5 w-5 ${cor}`} aria-hidden="true" />
+          <p className={`text-sm font-semibold ${cor}`}>{ROTULOS_TENDENCIA[tendencia]}</p>
+          <p className="text-xs text-muted-foreground">
+            {pct >= 0 ? "+" : ""}
+            {(pct * 100).toFixed(1)}%
+          </p>
+        </>
+      ) : (
+        <p className="text-sm text-muted-foreground">— sem dado —</p>
+      )}
+    </div>
   );
 }
 
