@@ -10,9 +10,17 @@ import { gmd } from "../../../src/domain/calculos/gmd.ts";
 import { diasDeDescanso } from "../../../src/domain/calculos/diasDeDescanso.ts";
 import { elegiveisParaVacina, type AnimalParaVacina, type RegraVacinal } from "../../../src/domain/calculos/elegiveisParaVacina.ts";
 
+// docs/01-dominio.md §12 — vacina_proibida/vacina_conflito são "crítico" e
+// precisam de tipo/severidade próprios (não o genérico mensagem_bot_recusada
+// que o `true` booleano gera). `alertarAdmin` aceita as duas formas: `true`
+// preserva o alerta genérico já usado por validarAnimalPodeReceberEvento
+// (domain, src/domain/validacao/validacaoSemantica.ts), e o objeto cobre os
+// casos do catálogo que precisam de tipo/severidade específicos.
+type AlertaEspecifico = { tipo: string; severidade: "info" | "atencao" | "critico"; titulo: string };
+
 export type ResultadoEvento =
   | { acao: "gravar" | "revisao"; canonico: Record<string, unknown> }
-  | { acao: "recusar"; pergunta: string; alertarAdmin?: boolean };
+  | { acao: "recusar"; pergunta: string; alertarAdmin?: boolean | AlertaEspecifico };
 
 export async function validarEvento(
   supabase: any,
@@ -174,13 +182,29 @@ async function validarVacinacao(supabase: any, base: Record<string, unknown>, da
     animaisAlvo = (animais ?? []).map((a: any) => ({ id: a.id, sexo: a.sexo, categoria: a.categoria, nascimento: a.data_nascimento }));
   }
 
+  // docs/01-dominio.md §12 "vacina_proibida": só a barreira absoluta
+  // (regra.bloqueada — hoje só aftosa, MA é zona livre sem vacinação desde
+  // abr/2024) vira esse alerta específico. Bloqueio por sexo/categoria/janela
+  // etária é recusa normal, sem alerta — não está no catálogo.
   if (animaisAlvo.length > 0) {
     const resultado = elegiveisParaVacina(animaisAlvo, regra, dataFato);
     if (resultado.bloqueados.length > 0) {
-      return { acao: "recusar", pergunta: capitalizar(resultado.bloqueados[0]!.motivo) };
+      const pergunta = capitalizar(resultado.bloqueados[0]!.motivo);
+      if (regra.bloqueada) {
+        return {
+          acao: "recusar",
+          pergunta,
+          alertarAdmin: { tipo: "vacina_proibida", severidade: "critico", titulo: `Tentativa de aplicar ${regra.nome}, vacina bloqueada` },
+        };
+      }
+      return { acao: "recusar", pergunta };
     }
   } else if (regra.bloqueada) {
-    return { acao: "recusar", pergunta: regra.motivoBloqueio ?? `${regra.nome} está bloqueada.` };
+    return {
+      acao: "recusar",
+      pergunta: regra.motivoBloqueio ?? `${regra.nome} está bloqueada.`,
+      alertarAdmin: { tipo: "vacina_proibida", severidade: "critico", titulo: `Tentativa de aplicar ${regra.nome}, vacina bloqueada` },
+    };
   }
 
   if (catalogo.incompativel_com?.length && catalogo.intervalo_minimo_dias) {
@@ -196,7 +220,16 @@ async function validarVacinacao(supabase: any, base: Record<string, unknown>, da
       (aplicadas ?? []).map((a: any) => ({ vacina: a.vacina, data: a.data })),
       dataFato
     );
-    if (intervalo.acao === "recusar") return intervalo;
+    // docs/01-dominio.md §12 "vacina_conflito": 2 aplicações incompatíveis no
+    // mesmo dia — validarIntervaloVacinal (domain, puro) só devolve a
+    // pergunta; o tipo/severidade do alerta é decisão desta camada.
+    if (intervalo.acao === "recusar") {
+      return {
+        acao: "recusar",
+        pergunta: intervalo.pergunta,
+        alertarAdmin: { tipo: "vacina_conflito", severidade: "critico", titulo: `Conflito de vacinas: ${regra.nome}` },
+      };
+    }
   }
 
   return { acao: "gravar", canonico: base };

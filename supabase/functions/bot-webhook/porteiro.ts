@@ -10,6 +10,7 @@ export interface UsuarioAtivo {
   nome: string;
   papel: string;
   telefone: string;
+  propriedade_id: string;
 }
 
 export type ResultadoPorteiro =
@@ -26,7 +27,7 @@ export async function passarPeloPorteiro(
 ): Promise<ResultadoPorteiro> {
   const { data: porChatId, error: erroChatId } = await supabase
     .from("usuarios_acesso")
-    .select("id, nome, papel, telefone")
+    .select("id, nome, papel, telefone, propriedade_id")
     .eq("chat_id_externo", chatIdExterno)
     .eq("plataforma", plataforma)
     .eq("status", "ativo")
@@ -43,7 +44,7 @@ export async function passarPeloPorteiro(
 
   const { data: porTelefone, error: erroTelefone } = await supabase
     .from("usuarios_acesso")
-    .select("id, nome, papel, telefone")
+    .select("id, nome, papel, telefone, propriedade_id")
     .eq("telefone", telefoneCompartilhado)
     .eq("plataforma", plataforma)
     .eq("status", "ativo")

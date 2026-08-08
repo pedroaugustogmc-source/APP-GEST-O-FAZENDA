@@ -15,14 +15,17 @@ import { avaliarManutencao } from "@/domain/calculos/avaliarManutencao";
 import { hojeEmFortaleza } from "@/domain/tipos/data";
 import type { Parametros, ISODate } from "@/domain/tipos";
 
-// docs/01-dominio.md §12 — catálogo de alertas. Cobre 14 dos 17 tipos: os 9
-// que já tinham dado sem financeiro (F3) + custo_acima_breakeven (F4) +
-// manutencao_vencida/manutencao_proxima/estoque_minimo/insumo_vencendo
-// (F5, M7/M8). Faltam vacina_conflito, vacina_proibida (já bloqueada de
-// fato pela validação semântica da F2, só não vira linha em `alertas`) e
-// mensagem_em_revisao (a fila de revisão já mostra a contagem direto,
-// F2) — fora do escopo declarado em ESTADO.md. Job diário (cron);
-// dedup/auto-resolução em src/infra/alertas.ts.
+// docs/01-dominio.md §12 — catálogo de alertas. Este worker diário cobre 14
+// dos 17 tipos: os 9 que já tinham dado sem financeiro (F3) +
+// custo_acima_breakeven (F4) + manutencao_vencida/manutencao_proxima/
+// estoque_minimo/insumo_vencendo (F5, M7/M8). vacina_conflito e
+// vacina_proibida NÃO passam por aqui — são gerados na hora, dentro do
+// próprio pipeline do bot (supabase/functions/bot-webhook/eventos.ts +
+// pipeline.ts), porque a barreira que bloqueia a vacina já roda ali, síncrona
+// com a mensagem que tentou registrar. mensagem_em_revisao continua fora: a
+// fila de revisão já mostra a contagem direto (F2), um alerta duplicado não
+// agrega nada — decisão declarada em ESTADO.md, não lacuna. Job diário
+// (cron); dedup/auto-resolução em src/infra/alertas.ts.
 //
 // Fase 6c: roda com service_role, que ignora RLS por completo — sem laço
 // por fazenda, alertas de todas as propriedades ficariam misturados (ou

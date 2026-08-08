@@ -180,12 +180,18 @@ export async function processarMensagem(ctx: ContextoPipeline, mensagem: Mensage
     if (resultado.acao === "recusar") {
       perguntas.push(resultado.pergunta);
       if (resultado.alertarAdmin) {
+        // docs/01-dominio.md §12: `alertarAdmin === true` (validações genéricas
+        // do domain, ex. animal já vendido) mantém o alerta genérico de sempre;
+        // o objeto (vacina_proibida/vacina_conflito, ver eventos.ts) carrega
+        // tipo/severidade/título próprios do catálogo.
+        const especifico = typeof resultado.alertarAdmin === "object" ? resultado.alertarAdmin : null;
         await supabase.from("alertas").insert({
-          tipo: "mensagem_bot_recusada",
-          severidade: "atencao",
+          propriedade_id: usuario.propriedade_id,
+          tipo: especifico?.tipo ?? "mensagem_bot_recusada",
+          severidade: especifico?.severidade ?? "atencao",
           entidade_tipo: "mensagens_bot",
           entidade_id: mensagemId,
-          titulo: "Bot recusou um registro",
+          titulo: especifico?.titulo ?? "Bot recusou um registro",
           mensagem: resultado.pergunta,
         });
       }

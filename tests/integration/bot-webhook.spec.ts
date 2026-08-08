@@ -96,13 +96,24 @@ describe.skipIf(!rodar)("bot-webhook — porteiro e validação semântica de po
       expect(mensagens?.[0]?.status).toBe("gravada");
     });
 
-    it("vacina de aftosa é bloqueada e não grava nada em vacinas_aplicadas", async () => {
-      const antes = await admin.from("vacinas_aplicadas").select("id", { count: "exact", head: true });
+    it("vacina de aftosa é bloqueada, não grava nada em vacinas_aplicadas e gera alerta vacina_proibida", async () => {
+      const antesAplicadas = await admin.from("vacinas_aplicadas").select("id", { count: "exact", head: true });
 
       await chamarWebhook(updateTelegramTexto(chatIdTeste, 11, "vou vacinar de aftosa semana que vem"));
 
-      const depois = await admin.from("vacinas_aplicadas").select("id", { count: "exact", head: true });
-      expect(depois.count).toBe(antes.count);
+      const depoisAplicadas = await admin.from("vacinas_aplicadas").select("id", { count: "exact", head: true });
+      expect(depoisAplicadas.count).toBe(antesAplicadas.count);
+
+      // docs/01-dominio.md §12: aftosa bloqueada é "crítico", não só uma
+      // recusa silenciosa ao vaqueiro — precisa virar alerta visível pro dono.
+      const depoisAlertas = await admin
+        .from("alertas")
+        .select("id, severidade, propriedade_id")
+        .eq("tipo", "vacina_proibida")
+        .order("gerado_em", { ascending: false })
+        .limit(1);
+      expect(depoisAlertas.data?.[0]?.severidade).toBe("critico");
+      expect(depoisAlertas.data?.[0]?.propriedade_id).toBeTruthy();
     });
   });
 });
