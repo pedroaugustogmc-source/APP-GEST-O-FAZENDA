@@ -1,5 +1,5 @@
+import type { ReactNode } from "react";
 import {
-  type LucideIcon,
   Sprout,
   Home,
   MapPin,
@@ -29,64 +29,71 @@ import { BotaoSair } from "./botao-sair";
 import { NavLink } from "./nav-link";
 import { IndicadorSincronizacao } from "@/components/indicador-sincronizacao";
 
-type ItemMenu = { href: string; label: string; icone: LucideIcon };
+// Ícone já vem instanciado como elemento (<Home .../>), não como referência
+// de componente (Home) — passar a referência crua pra dentro de NavLink
+// ("use client") quebra a serialização do React Server Components
+// ("Functions cannot be passed directly to Client Components"), porque o
+// cliente receberia uma função pra chamar, não um elemento já renderizável.
+type ItemMenu = { href: string; label: string; icone: ReactNode };
 type GrupoMenu = { titulo: string; itens: ItemMenu[] };
+
+const CLASSE_ICONE = "h-4 w-4 shrink-0";
 
 const GRUPOS: GrupoMenu[] = [
   {
     titulo: "",
-    itens: [{ href: "/", label: "Início", icone: Home }],
+    itens: [{ href: "/", label: "Início", icone: <Home className={CLASSE_ICONE} /> }],
   },
   {
     titulo: "Operação",
     itens: [
-      { href: "/pastos", label: "Pastos", icone: MapPin },
-      { href: "/lotes", label: "Lotes", icone: Layers },
-      { href: "/animais", label: "Animais", icone: Beef },
-      { href: "/rebanho", label: "Rebanho", icone: Users },
-      { href: "/sanidade", label: "Sanidade", icone: Stethoscope },
+      { href: "/pastos", label: "Pastos", icone: <MapPin className={CLASSE_ICONE} /> },
+      { href: "/lotes", label: "Lotes", icone: <Layers className={CLASSE_ICONE} /> },
+      { href: "/animais", label: "Animais", icone: <Beef className={CLASSE_ICONE} /> },
+      { href: "/rebanho", label: "Rebanho", icone: <Users className={CLASSE_ICONE} /> },
+      { href: "/sanidade", label: "Sanidade", icone: <Stethoscope className={CLASSE_ICONE} /> },
     ],
   },
   {
     titulo: "Financeiro",
     itens: [
-      { href: "/financeiro", label: "Financeiro", icone: Wallet },
-      { href: "/financeiro/dre", label: "DRE por lote", icone: FileBarChart },
-      { href: "/financeiro/cenarios", label: "Cenários", icone: LineChart },
-      { href: "/mercado", label: "Mercado", icone: TrendingUp },
+      { href: "/financeiro", label: "Financeiro", icone: <Wallet className={CLASSE_ICONE} /> },
+      { href: "/financeiro/dre", label: "DRE por lote", icone: <FileBarChart className={CLASSE_ICONE} /> },
+      { href: "/financeiro/cenarios", label: "Cenários", icone: <LineChart className={CLASSE_ICONE} /> },
+      { href: "/mercado", label: "Mercado", icone: <TrendingUp className={CLASSE_ICONE} /> },
     ],
   },
   {
     titulo: "Recursos",
     itens: [
-      { href: "/maquinas", label: "Máquinas", icone: Wrench },
-      { href: "/checklist", label: "Checklist", icone: ClipboardCheck },
-      { href: "/cotacoes", label: "Cotações", icone: Receipt },
-      { href: "/insumos", label: "Insumos", icone: Package },
+      { href: "/maquinas", label: "Máquinas", icone: <Wrench className={CLASSE_ICONE} /> },
+      { href: "/checklist", label: "Checklist", icone: <ClipboardCheck className={CLASSE_ICONE} /> },
+      { href: "/cotacoes", label: "Cotações", icone: <Receipt className={CLASSE_ICONE} /> },
+      { href: "/insumos", label: "Insumos", icone: <Package className={CLASSE_ICONE} /> },
     ],
   },
   {
     titulo: "Planejamento",
     itens: [
-      { href: "/tarefas", label: "Tarefas", icone: ListTodo },
-      { href: "/relatorios", label: "Relatórios", icone: FileText },
+      { href: "/tarefas", label: "Tarefas", icone: <ListTodo className={CLASSE_ICONE} /> },
+      { href: "/relatorios", label: "Relatórios", icone: <FileText className={CLASSE_ICONE} /> },
     ],
   },
   {
     titulo: "Bot",
     itens: [
-      { href: "/revisao", label: "Revisão do bot", icone: MessageSquareWarning },
-      { href: "/cartao-bolso", label: "Cartão de bolso", icone: WalletIcon },
+      { href: "/revisao", label: "Revisão do bot", icone: <MessageSquareWarning className={CLASSE_ICONE} /> },
+      { href: "/cartao-bolso", label: "Cartão de bolso", icone: <WalletIcon className={CLASSE_ICONE} /> },
     ],
   },
   {
     titulo: "Administração",
     itens: [
-      { href: "/compliance", label: "Compliance", icone: ShieldCheck },
-      { href: "/trabalhadores", label: "Trabalhadores", icone: UserCog },
-      { href: "/parametros", label: "Parâmetros", icone: SlidersHorizontal },
-      { href: "/propriedades", label: "Propriedade", icone: Building2 },
-      { href: "/importar", label: "Importar planilha", icone: Upload },
+      { href: "/compliance", label: "Compliance", icone: <ShieldCheck className={CLASSE_ICONE} /> },
+      { href: "/trabalhadores", label: "Trabalhadores", icone: <UserCog className={CLASSE_ICONE} /> },
+      { href: "/parametros", label: "Parâmetros", icone: <SlidersHorizontal className={CLASSE_ICONE} /> },
+      { href: "/propriedades", label: "Propriedade", icone: <Building2 className={CLASSE_ICONE} /> },
+      { href: "/importar", label: "Importar planilha", icone: <Upload className={CLASSE_ICONE} /> },
     ],
   },
 ];

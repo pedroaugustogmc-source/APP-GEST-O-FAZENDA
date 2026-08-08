@@ -2,18 +2,18 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { LucideIcon } from "lucide-react";
+import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 export function NavLink({
   href,
   label,
-  icone: Icone,
+  icone,
   variante = "lateral",
 }: {
   href: string;
   label: string;
-  icone: LucideIcon;
+  icone: ReactNode;
   variante?: "lateral" | "topo";
 }) {
   const pathname = usePathname();
@@ -45,7 +45,7 @@ export function NavLink({
           : "text-secondary-foreground/90 hover:bg-secondary-foreground/10 hover:text-secondary-foreground"
       )}
     >
-      <Icone className="h-4 w-4 shrink-0" />
+      {icone}
       {label}
     </Link>
   );
