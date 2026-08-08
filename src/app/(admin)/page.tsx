@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Wallet, Scale, TrendingUp, Beef, Banknote, type LucideIcon } from "lucide-react";
 import { criarClienteServidor } from "@/infra/supabase/server";
 import { buscarParametros } from "@/infra/supabase/parametros";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -111,17 +112,19 @@ export default async function PaginaInicial() {
   return (
     <div className="flex flex-col gap-8">
       <div>
-        <h1 className="text-2xl font-semibold text-foreground">Como está a fazenda hoje?</h1>
+        <h1 className="text-3xl font-bold tracking-tight text-foreground">Como está a fazenda hoje?</h1>
         <p className="text-sm text-muted-foreground">{new Date().toLocaleString("pt-BR")}</p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <NumeroGrande
+          icone={Wallet}
           titulo="Custo por @"
           valor={indicadoresFinanceiros.custoPorArroba.valor !== null ? `${formatarCentavos(indicadoresFinanceiros.custoPorArroba.valor)}/@` : "— sem dado —"}
           nota={indicadoresFinanceiros.custoPorArroba.motivo ?? `atualizado ${hoje}`}
         />
         <NumeroGrande
+          icone={Scale}
           titulo="Ponto de equilíbrio vs mercado"
           valor={distanciaMercado !== null ? `${distanciaMercado >= 0 ? "+" : ""}${(distanciaMercado * 100).toFixed(1)}%` : "— sem dado —"}
           nota={
@@ -134,13 +137,15 @@ export default async function PaginaInicial() {
           inverso={distanciaMercado !== null && distanciaMercado < 0}
         />
         <NumeroGrande
+          icone={TrendingUp}
           titulo="Margem projetada"
           valor={indicadoresFinanceiros.margemProjetada !== null ? formatarCentavos(indicadoresFinanceiros.margemProjetada) : "— sem dado —"}
           nota={indicadoresFinanceiros.margemProjetada !== null ? `sobre ${indicadoresFinanceiros.arrobasTotal.toFixed(1)} arroba(s) hoje` : "sem preço de mercado para nenhuma categoria de lote"}
           inverso={indicadoresFinanceiros.margemProjetada !== null && indicadoresFinanceiros.margemProjetada < 0n}
         />
-        <NumeroGrande titulo="Cabeças totais" valor={cabecasTotais.toLocaleString("pt-BR")} nota={`atualizado ${hoje}`} destaque />
+        <NumeroGrande icone={Beef} titulo="Cabeças totais" valor={cabecasTotais.toLocaleString("pt-BR")} nota={`atualizado ${hoje}`} destaque />
         <NumeroGrande
+          icone={Banknote}
           titulo="Caixa do mês"
           valor={temLancamentoNoMes ? formatarCentavos(caixaMes) : "— sem dado —"}
           nota={temLancamentoNoMes ? `receita − custo desde ${inicioMes}` : "nenhum lançamento neste mês"}
@@ -235,12 +240,14 @@ export default async function PaginaInicial() {
 }
 
 function NumeroGrande({
+  icone: Icone,
   titulo,
   valor,
   nota,
   destaque,
   inverso,
 }: {
+  icone: LucideIcon;
   titulo: string;
   valor: string;
   nota: string;
@@ -248,9 +255,12 @@ function NumeroGrande({
   inverso?: boolean;
 }) {
   return (
-    <Card>
-      <CardHeader>
+    <Card className="overflow-hidden border-t-4 border-t-primary shadow-md transition-shadow hover:shadow-lg">
+      <CardHeader className="flex-row items-center justify-between gap-2 pb-2">
         <CardTitle className="text-sm font-medium text-muted-foreground">{titulo}</CardTitle>
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-primary">
+          <Icone className="h-4 w-4" />
+        </span>
       </CardHeader>
       <CardContent>
         <p className={`text-numero-grande ${destaque ? "text-primary" : inverso ? "text-critico" : "text-foreground"}`}>{valor}</p>
