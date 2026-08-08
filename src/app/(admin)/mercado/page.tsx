@@ -17,6 +17,7 @@ export const dynamic = "force-dynamic";
 const ROTULOS_TIPO: Record<string, string> = {
   arroba_boi: "Arroba do boi gordo",
   arroba_vaca: "Arroba da vaca gorda",
+  boi_magro: "Arroba do boi magro (reposição)",
   bezerro: "Bezerro",
   bezerra: "Bezerra",
   garrote: "Garrote",

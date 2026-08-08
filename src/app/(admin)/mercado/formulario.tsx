@@ -15,6 +15,7 @@ import { ORDEM_TIPOS_PRECO } from "./consultas";
 const ROTULOS_TIPO: Record<TipoPrecoMercadoDB, string> = {
   arroba_boi: "Arroba do boi gordo",
   arroba_vaca: "Arroba da vaca gorda",
+  boi_magro: "Arroba do boi magro (reposição)",
   bezerro: "Bezerro (cabeça)",
   bezerra: "Bezerra (cabeça)",
   garrote: "Garrote (cabeça)",
@@ -25,6 +26,7 @@ const ROTULOS_TIPO: Record<TipoPrecoMercadoDB, string> = {
 const UNIDADE_PADRAO: Record<TipoPrecoMercadoDB, string> = {
   arroba_boi: "@",
   arroba_vaca: "@",
+  boi_magro: "@",
   bezerro: "cabeça",
   bezerra: "cabeça",
   garrote: "cabeça",

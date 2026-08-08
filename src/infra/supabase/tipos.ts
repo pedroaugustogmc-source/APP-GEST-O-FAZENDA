@@ -26,6 +26,7 @@ export type CentroCustoDB = "cria" | "recria" | "leite" | "estrutura" | "adminis
 export type TipoPrecoMercadoDB =
   | "arroba_boi"
   | "arroba_vaca"
+  | "boi_magro"
   | "bezerro"
   | "bezerra"
   | "garrote"

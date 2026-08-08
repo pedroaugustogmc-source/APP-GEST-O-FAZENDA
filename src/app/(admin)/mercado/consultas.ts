@@ -7,6 +7,7 @@ import type { TipoPrecoMercadoDB } from "@/infra/supabase/tipos";
 export const ORDEM_TIPOS_PRECO: TipoPrecoMercadoDB[] = [
   "arroba_boi",
   "arroba_vaca",
+  "boi_magro",
   "bezerro",
   "bezerra",
   "garrote",
