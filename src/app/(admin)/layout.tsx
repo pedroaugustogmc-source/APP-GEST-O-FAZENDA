@@ -1,5 +1,6 @@
-import Link from "next/link";
 import {
+  type LucideIcon,
+  Sprout,
   Home,
   MapPin,
   Layers,
@@ -25,9 +26,10 @@ import {
   Wallet as WalletIcon,
 } from "lucide-react";
 import { BotaoSair } from "./botao-sair";
+import { NavLink } from "./nav-link";
 import { IndicadorSincronizacao } from "@/components/indicador-sincronizacao";
 
-type ItemMenu = { href: string; label: string; icone: React.ComponentType<{ className?: string }> };
+type ItemMenu = { href: string; label: string; icone: LucideIcon };
 type GrupoMenu = { titulo: string; itens: ItemMenu[] };
 
 const GRUPOS: GrupoMenu[] = [
@@ -96,7 +98,8 @@ export default function LayoutAdmin({ children }: { children: React.ReactNode })
     <div className="min-h-dvh bg-background lg:flex">
       <aside className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col lg:border-r lg:border-border lg:bg-secondary lg:text-secondary-foreground">
         <div className="flex h-16 items-center gap-2 border-b border-secondary-foreground/15 px-5">
-          <span className="text-lg font-bold tracking-tight">🌾 Fazenda</span>
+          <Sprout className="h-6 w-6 shrink-0" aria-hidden="true" />
+          <span className="text-lg font-bold tracking-tight">Fazenda</span>
         </div>
         <nav className="flex-1 overflow-y-auto px-3 py-4" aria-label="Navegação principal">
           {GRUPOS.map((grupo, i) => (
@@ -108,14 +111,7 @@ export default function LayoutAdmin({ children }: { children: React.ReactNode })
               )}
               <div className="flex flex-col gap-0.5">
                 {grupo.itens.map((item) => (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-secondary-foreground/90 transition-colors hover:bg-secondary-foreground/10 hover:text-secondary-foreground"
-                  >
-                    <item.icone className="h-4 w-4 shrink-0" />
-                    {item.label}
-                  </Link>
+                  <NavLink key={item.href} href={item.href} label={item.label} icone={item.icone} />
                 ))}
               </div>
             </div>
@@ -131,13 +127,7 @@ export default function LayoutAdmin({ children }: { children: React.ReactNode })
               aria-label="Navegação principal (celular)"
             >
               {TODOS_ITENS.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-accent"
-                >
-                  {item.label}
-                </Link>
+                <NavLink key={item.href} href={item.href} label={item.label} icone={item.icone} variante="topo" />
               ))}
             </nav>
             <div className="ml-auto flex items-center gap-3">
