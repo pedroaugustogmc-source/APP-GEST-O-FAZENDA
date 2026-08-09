@@ -11,6 +11,22 @@ export function gerarClientUuid(): string {
     : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+export interface OpcoesEnfileirar {
+  // Fixa o client_uuid em vez de gerar um novo — pra mandar uma 2ª operação
+  // (ex.: um POST de upsert seguinte) que atualiza a MESMA linha, sem
+  // precisar saber o id que o servidor ainda não gerou. Ver
+  // pastos/formulario.tsx — cadastro entra na fila na hora, foto (que pode
+  // demorar ou falhar na rede) chega depois, sem travar o primeiro.
+  clientUuidFixo?: string;
+  // Rodado só depois que ESTA operação sincronizar com sucesso — seja na
+  // tentativa imediata (void sincronizar() logo abaixo) ou numa retentativa
+  // de fundo minutos depois (sincronizar.ts). Resolve o problema de "apaguei
+  // o arquivo antigo cedo demais, antes de confirmar que o novo salvou de
+  // verdade" sem a tela precisar ficar checando se a operação ainda está
+  // pendente por conta própria.
+  limpezaAoConcluir?: { bucket: string; caminho: string };
+}
+
 /**
  * Toda escrita das telas de cadastro passa por aqui, nunca por fetch direto
  * (docs/05-arquitetura.md §36 item 1). A UI é otimista: grava local primeiro,
@@ -21,14 +37,9 @@ export async function enfileirarOperacao(
   tabela: TabelaSincronizavel,
   metodo: "POST" | "PATCH",
   payload: Record<string, unknown>,
-  // Opcional: quem chama pode fixar o client_uuid pra conseguir mandar uma
-  // 2ª operação (ex.: um POST de upsert seguinte) que atualiza a MESMA
-  // linha, sem precisar saber o id que o servidor ainda não gerou. Ver
-  // pastos/formulario.tsx — cadastro entra na fila na hora, foto (que pode
-  // demorar ou falhar na rede) chega depois, sem travar o primeiro.
-  clientUuidFixo?: string
+  opcoes?: OpcoesEnfileirar
 ): Promise<string> {
-  const clientUuid = clientUuidFixo ?? gerarClientUuid();
+  const clientUuid = opcoes?.clientUuidFixo ?? gerarClientUuid();
 
   await bancoOffline.operacoesPendentes.add({
     clientUuid,
@@ -37,6 +48,7 @@ export async function enfileirarOperacao(
     payload: { ...payload, client_uuid: clientUuid },
     criadoEm: new Date().toISOString(),
     tentativas: 0,
+    ...(opcoes?.limpezaAoConcluir ? { limpezaAoConcluir: opcoes.limpezaAoConcluir } : {}),
   });
 
   // Tenta sincronizar imediatamente; se não houver rede, fica na fila mesmo.
@@ -47,13 +59,4 @@ export async function enfileirarOperacao(
 
 export async function contarPendentes(): Promise<number> {
   return bancoOffline.operacoesPendentes.count();
-}
-
-/** Usado por quem precisa confirmar que uma operação já saiu da fila (ex.:
- * só apagar um arquivo antigo do Storage depois que a troca sincronizou de
- * verdade) — mantém o acesso à tabela do Dexie dentro deste módulo, em vez
- * de cada tela importar bancoOffline direto. */
-export async function estaPendente(clientUuid: string): Promise<boolean> {
-  const quantidade = await bancoOffline.operacoesPendentes.where("clientUuid").equals(clientUuid).count();
-  return quantidade > 0;
 }

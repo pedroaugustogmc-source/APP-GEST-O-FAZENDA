@@ -30,6 +30,12 @@ export interface OperacaoPendente {
   criadoEm: string;
   tentativas: number;
   ultimoErro?: string;
+  // Rodado pelo sincronizador (src/infra/offline/sincronizar.ts) só depois
+  // que ESTA operação sair da fila com sucesso — nunca antes, nem se ela
+  // falhar e ficar pra tentar depois. Genérico (bucket + caminho), não
+  // amarrado a foto de pasto especificamente — qualquer tela que troque um
+  // arquivo por outro pode usar.
+  limpezaAoConcluir?: { bucket: string; caminho: string };
 }
 
 class BancoOffline extends Dexie {

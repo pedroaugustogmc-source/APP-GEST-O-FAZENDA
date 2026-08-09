@@ -1,6 +1,17 @@
 import { bancoOffline } from "./db";
+import { criarClienteNavegador } from "../supabase/client";
 
 const MAX_TENTATIVAS = 5;
+// Limite de engenharia, não parâmetro de negócio (mesmo raciocínio da
+// regra 3 do CLAUDE.md aplicado a limites técnicos, como o de tamanho de
+// arquivo em fotoPasto.ts). Sem isso, um `fetch` numa conexão rural que
+// trava sem cair (sem RST/FIN, comum em sinal fraco) ficaria pendurado
+// indefinidamente — e agora que `sincronizar()` de fato espera terminar
+// (achado em revisão de código), isso travaria a tela de quem chamou
+// `await sincronizar()` pra sempre, exatamente o que a regra 8 do
+// CLAUDE.md proíbe. Com o timeout, o pior caso vira "espera 15s e a
+// operação volta pra fila", não "trava pra sempre".
+const TIMEOUT_FETCH_MS = 15_000;
 let promessaEmAndamento: Promise<void> | null = null;
 
 /**
@@ -30,6 +41,10 @@ export function sincronizar(): Promise<void> {
 
 async function executarSincronizacao(): Promise<void> {
   const pendentes = await bancoOffline.operacoesPendentes.orderBy("criadoEm").toArray();
+  // Um cliente só pro lote inteiro — criar um novo por item de limpeza
+  // multiplicaria instâncias de GoTrueClient concorrentes à toa (mesmo
+  // localStorage de sessão), achado em revisão de código.
+  const supabaseNavegador = criarClienteNavegador();
 
   for (const operacao of pendentes) {
     try {
@@ -37,6 +52,7 @@ async function executarSincronizacao(): Promise<void> {
         method: operacao.metodo,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(operacao.payload),
+        signal: AbortSignal.timeout(TIMEOUT_FETCH_MS),
       });
 
       if (!resposta.ok) {
@@ -45,6 +61,15 @@ async function executarSincronizacao(): Promise<void> {
 
       if (operacao.id !== undefined) {
         await bancoOffline.operacoesPendentes.delete(operacao.id);
+      }
+
+      // Só roda depois de confirmar que ESTA operação saiu da fila com
+      // sucesso — nunca antes (docs/infra/offline/db.ts: OperacaoPendente.
+      // limpezaAoConcluir). Melhor esforço: se falhar, o arquivo antigo só
+      // fica órfão no bucket, não quebra nada visível pro dono.
+      if (operacao.limpezaAoConcluir) {
+        const { bucket, caminho } = operacao.limpezaAoConcluir;
+        void supabaseNavegador.storage.from(bucket).remove([caminho]);
       }
     } catch (erro) {
       if (operacao.id === undefined) continue;

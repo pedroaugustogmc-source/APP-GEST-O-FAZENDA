@@ -51,9 +51,3 @@ export async function enviarFotoPasto(propriedadeId: string, arquivo: File): Pro
   }
   return { caminho, erro: null };
 }
-
-/** Best-effort — se a exclusão falhar, o arquivo antigo só fica órfão no bucket, não quebra nada. */
-export async function removerFotoPasto(caminho: string): Promise<void> {
-  const supabase = criarClienteNavegador();
-  await supabase.storage.from("fotos-pastos").remove([caminho]);
-}

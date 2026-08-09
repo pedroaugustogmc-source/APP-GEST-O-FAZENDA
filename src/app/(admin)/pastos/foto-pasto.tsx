@@ -3,9 +3,9 @@
 import { useRef, useState, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { enfileirarOperacao, estaPendente } from "@/infra/offline/fila";
+import { enfileirarOperacao } from "@/infra/offline/fila";
 import { sincronizar } from "@/infra/offline/sincronizar";
-import { enviarFotoPasto, removerFotoPasto } from "@/infra/supabase/fotoPasto";
+import { enviarFotoPasto } from "@/infra/supabase/fotoPasto";
 
 interface FotoPastoProps {
   pastoId: string;
@@ -38,23 +38,32 @@ export function FotoPasto({ pastoId, propriedadeId, fotoPathAtual, fotoUrl }: Fo
       return;
     }
 
-    const clientUuid = await enfileirarOperacao("pastos", "PATCH", { id: pastoId, foto_path: resultado.caminho });
-    // Mesmo motivo do formulario.tsx: enfileirarOperacao só grava local e
-    // dispara a sincronização em segundo plano — sem esperar ela terminar, o
-    // refresh abaixo recarregaria antes do PATCH chegar no servidor e a foto
-    // pareceria não ter sido trocada.
+    // A foto antiga só é apagada do bucket depois que este PATCH sair da
+    // fila com sucesso de verdade — seja agora (sincronizar() logo abaixo)
+    // ou numa retentativa de fundo minutos depois, se a rede falhar agora
+    // (limpezaAoConcluir, ver src/infra/offline/sincronizar.ts). Sem isso,
+    // apagar cedo demais deixaria o card sem foto nenhuma até a próxima
+    // tentativa terminar.
+    //
+    // Limitação aceita e declarada (achado em revisão de código, não
+    // corrigido por ser desproporcional ao ganho): `fotoPathAtual` é só o
+    // valor que a tela tinha ao carregar, não o histórico completo. Se o
+    // dono trocar a foto duas vezes offline antes da 1ª troca sincronizar,
+    // a foto do meio (nunca virou "fotoPathAtual" de nenhuma chamada) fica
+    // órfã no bucket pra sempre. `pastos.foto_path` no banco e a foto
+    // exibida na tela sempre terminam corretos — o efeito é só espaço não
+    // aproveitado no Storage, nunca dado errado.
+    await enfileirarOperacao(
+      "pastos",
+      "PATCH",
+      { id: pastoId, foto_path: resultado.caminho },
+      fotoPathAtual ? { limpezaAoConcluir: { bucket: "fotos-pastos", caminho: fotoPathAtual } } : undefined
+    );
+    // enfileirarOperacao só grava local e dispara a sincronização em
+    // segundo plano — sem esperar ela terminar, o refresh abaixo
+    // recarregaria antes do PATCH chegar no servidor e a foto pareceria não
+    // ter sido trocada.
     await sincronizar();
-
-    // sincronizar() engole erro de rede/servidor pra poder tentar de novo
-    // depois (não rejeita a promise) — "terminou" não é o mesmo que "deu
-    // certo". Só apaga a foto antiga do bucket se a operação realmente saiu
-    // da fila dentro desta chamada; se ficou pendente, a foto antiga fica
-    // órfã no bucket até alguém trocar de novo (nenhuma tentativa
-    // automática posterior — 30s/volta da rede, sincronizar.ts — dispara
-    // essa limpeza; é um efeito colateral aceito, não um vazamento de dado).
-    if (fotoPathAtual && !(await estaPendente(clientUuid))) {
-      void removerFotoPasto(fotoPathAtual);
-    }
 
     setEnviando(false);
     router.refresh();

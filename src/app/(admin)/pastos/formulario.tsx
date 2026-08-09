@@ -55,14 +55,19 @@ export function FormularioPasto({ propriedadeId }: { propriedadeId: string }) {
     // linha sem precisar do id que o servidor ainda não gerou.
     const clientUuid = gerarClientUuid();
 
-    await enfileirarOperacao("pastos", "POST", { ...dadosBase, foto_path: null }, clientUuid);
+    await enfileirarOperacao("pastos", "POST", { ...dadosBase, foto_path: null }, { clientUuidFixo: clientUuid });
 
     if (foto) {
       const resultado = await enviarFotoPasto(propriedadeId, foto);
       if (resultado.erro) {
         setAvisoFoto(`${resultado.erro} O pasto foi salvo sem a foto.`);
       } else if (resultado.caminho) {
-        await enfileirarOperacao("pastos", "POST", { ...dadosBase, foto_path: resultado.caminho }, clientUuid);
+        await enfileirarOperacao(
+          "pastos",
+          "POST",
+          { ...dadosBase, foto_path: resultado.caminho },
+          { clientUuidFixo: clientUuid }
+        );
       }
     }
 
