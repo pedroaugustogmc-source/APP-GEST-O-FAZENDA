@@ -4,6 +4,7 @@ import { useRef, useState, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { enfileirarOperacao } from "@/infra/offline/fila";
+import { sincronizar } from "@/infra/offline/sincronizar";
 import { enviarFotoPasto, removerFotoPasto } from "@/infra/supabase/fotoPasto";
 
 interface FotoPastoProps {
@@ -38,6 +39,11 @@ export function FotoPasto({ pastoId, propriedadeId, fotoPathAtual, fotoUrl }: Fo
     }
 
     await enfileirarOperacao("pastos", "PATCH", { id: pastoId, foto_path: resultado.caminho });
+    // Mesmo motivo do formulario.tsx: enfileirarOperacao só grava local e
+    // dispara a sincronização em segundo plano — sem esperar ela terminar, o
+    // refresh abaixo recarregaria antes do PATCH chegar no servidor e a foto
+    // pareceria não ter sido trocada.
+    await sincronizar();
     if (fotoPathAtual) void removerFotoPasto(fotoPathAtual);
 
     setEnviando(false);

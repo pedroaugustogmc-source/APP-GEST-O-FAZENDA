@@ -34,12 +34,20 @@ export async function enviarFotoPasto(propriedadeId: string, arquivo: File): Pro
     return { caminho: null, erro: "Imagem muito grande — máximo 5MB." };
   }
 
-  const caminho = `${propriedadeId}/${crypto.randomUUID()}.${extensao}`;
+  const identificador =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const caminho = `${propriedadeId}/${identificador}.${extensao}`;
+
   const supabase = criarClienteNavegador();
   const { error } = await supabase.storage.from("fotos-pastos").upload(caminho, arquivo);
 
   if (error) {
-    return { caminho: null, erro: "Sem conexão pra enviar a foto agora. Tente de novo mais tarde." };
+    // Mostra o motivo real (permissão, rede, etc.) em vez de presumir que é
+    // sempre falta de conexão — regra 2 do CLAUDE.md também vale pra
+    // mensagem de erro, não só pra dado exibido.
+    return { caminho: null, erro: `Não deu pra enviar a foto: ${error.message}` };
   }
   return { caminho, erro: null };
 }

@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { enfileirarOperacao } from "@/infra/offline/fila";
+import { sincronizar } from "@/infra/offline/sincronizar";
 import { enviarFotoPasto } from "@/infra/supabase/fotoPasto";
 
 export function FormularioPasto({ propriedadeId }: { propriedadeId: string }) {
@@ -52,6 +53,12 @@ export function FormularioPasto({ propriedadeId }: { propriedadeId: string }) {
       observacao: observacao || null,
       foto_path: fotoPath,
     });
+    // enfileirarOperacao só grava no IndexedDB local e dispara a
+    // sincronização em segundo plano (void sincronizar(), fila.ts) — sem
+    // esperar ela terminar aqui, o router.refresh() abaixo recarrega a
+    // página ANTES do POST chegar no servidor, e o pasto novo (ou a foto)
+    // parece não ter sido salvo. Esperar de verdade corrige isso.
+    await sincronizar();
 
     setSalvando(false);
     setNome("");
