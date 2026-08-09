@@ -9,12 +9,14 @@ const esquemaCriacao = z.object({
   tem_acude: z.boolean().default(false),
   nivel_acude: z.number().min(0).max(100).nullable().optional(),
   observacao: z.string().nullable().optional(),
+  foto_path: z.string().nullable().optional(),
   client_uuid: z.string().min(1),
 });
 
 const esquemaAtualizacao = z.object({
   id: z.string().uuid(),
   status: z.enum(["em_uso", "descanso", "vedado", "reforma"]).optional(),
+  foto_path: z.string().nullable().optional(),
 });
 
 export const { POST, PATCH } = criarRotaEntidade({

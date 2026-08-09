@@ -8,8 +8,11 @@ import { avaliarLotacao } from "@/domain/calculos/avaliarLotacao";
 import { hojeEmFortaleza, partesDeISODate } from "@/domain/tipos/data";
 import type { ISODate } from "@/domain/tipos";
 import { FormularioPasto } from "./formulario";
+import { FotoPasto } from "./foto-pasto";
 
 export const dynamic = "force-dynamic";
+
+const VALIDADE_URL_FOTO_SEGUNDOS = 3600;
 
 interface LinhaLotacao {
   pasto_id: string;
@@ -22,6 +25,7 @@ interface LinhaLotacao {
   pasto_status: StatusPasto;
   data_entrada_lote_atual: ISODate | null;
   data_saida_ultimo_lote: ISODate | null;
+  pasto_foto_path: string | null;
   lote_id: string | null;
   lote_nome: string | null;
   lote_categoria: string | null;
@@ -34,18 +38,35 @@ export default async function PaginaPastos() {
   const supabase = criarClienteServidor();
   const hoje = hojeEmFortaleza();
 
-  const [{ data: lotacaoData }, parametros, { data: movimentacoes }, { data: chuvaData }] = await Promise.all([
-    supabase.from("v_lotacao_por_pasto").select("*").order("pasto_nome"),
-    buscarParametros(supabase),
-    supabase
-      .from("movimentacoes_pasto")
-      .select("pasto_destino_id, dias_descanso_destino")
-      .not("dias_descanso_destino", "is", null),
-    supabase.from("chuvas").select("milimetros").gte("data", subtrairDias(hoje, 30)),
-  ]);
+  const [{ data: lotacaoData }, parametros, { data: movimentacoes }, { data: chuvaData }, { data: propriedadeAtual }] =
+    await Promise.all([
+      supabase.from("v_lotacao_por_pasto").select("*").order("pasto_nome"),
+      buscarParametros(supabase),
+      supabase
+        .from("movimentacoes_pasto")
+        .select("pasto_destino_id, dias_descanso_destino")
+        .not("dias_descanso_destino", "is", null),
+      supabase.from("chuvas").select("milimetros").gte("data", subtrairDias(hoje, 30)),
+      supabase.from("propriedade").select("id").single(),
+    ]);
 
   const pastos = (lotacaoData ?? []) as LinhaLotacao[];
   const chuva30dias = (chuvaData ?? []).reduce((total: number, c: { milimetros: number }) => total + c.milimetros, 0);
+  const propriedadeId = propriedadeAtual?.id as string | undefined;
+
+  // URL assinada gerada a cada carregamento — nunca guardada (docs da
+  // migração 20260809120000_foto_pastos.sql: signed URL expira, o caminho no
+  // bucket é a única fonte estável).
+  const caminhosComFoto = pastos.map((p) => p.pasto_foto_path).filter((c): c is string => c !== null);
+  const urlPorCaminho = new Map<string, string>();
+  if (caminhosComFoto.length > 0) {
+    const { data: assinadas } = await supabase.storage
+      .from("fotos-pastos")
+      .createSignedUrls(caminhosComFoto, VALIDADE_URL_FOTO_SEGUNDOS);
+    for (const item of assinadas ?? []) {
+      if (item.signedUrl) urlPorCaminho.set(item.path ?? "", item.signedUrl);
+    }
+  }
 
   const descansoPorPasto = new Map<string, number[]>();
   for (const mov of (movimentacoes ?? []) as Array<{ pasto_destino_id: string; dias_descanso_destino: number }>) {
@@ -65,7 +86,14 @@ export default async function PaginaPastos() {
           </span>
         </p>
       </div>
-      <FormularioPasto />
+      {propriedadeId ? (
+        <FormularioPasto propriedadeId={propriedadeId} />
+      ) : (
+        <p className="text-sm text-critico">
+          Não foi possível identificar a fazenda deste login — recarregue a página. Sem isso, não dá pra cadastrar
+          pasto novo.
+        </p>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {pastos.map((pasto) => {
@@ -101,6 +129,14 @@ export default async function PaginaPastos() {
                 </div>
               </CardHeader>
               <CardContent className="flex flex-col gap-3 text-sm">
+                {propriedadeId && (
+                  <FotoPasto
+                    pastoId={pasto.pasto_id}
+                    propriedadeId={propriedadeId}
+                    fotoPathAtual={pasto.pasto_foto_path}
+                    fotoUrl={pasto.pasto_foto_path ? (urlPorCaminho.get(pasto.pasto_foto_path) ?? null) : null}
+                  />
+                )}
                 <div className="grid grid-cols-2 gap-2 text-muted-foreground">
                   <span>Tamanho</span>
                   <span className="text-right text-foreground">{pasto.tamanho_ha.toLocaleString("pt-BR")} ha</span>

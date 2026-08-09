@@ -1,14 +1,15 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, type ChangeEvent, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { enfileirarOperacao } from "@/infra/offline/fila";
+import { enviarFotoPasto } from "@/infra/supabase/fotoPasto";
 
-export function FormularioPasto() {
+export function FormularioPasto({ propriedadeId }: { propriedadeId: string }) {
   const router = useRouter();
   const [nome, setNome] = useState("");
   const [apelidos, setApelidos] = useState("");
@@ -17,11 +18,26 @@ export function FormularioPasto() {
   const [temAcude, setTemAcude] = useState(false);
   const [nivelAcude, setNivelAcude] = useState("");
   const [observacao, setObservacao] = useState("");
+  const [foto, setFoto] = useState<File | null>(null);
+  const [avisoFoto, setAvisoFoto] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
+
+  function selecionarFoto(evento: ChangeEvent<HTMLInputElement>) {
+    setFoto(evento.target.files?.[0] ?? null);
+    setAvisoFoto(null);
+  }
 
   async function salvar(evento: FormEvent) {
     evento.preventDefault();
     setSalvando(true);
+    setAvisoFoto(null);
+
+    let fotoPath: string | null = null;
+    if (foto) {
+      const resultado = await enviarFotoPasto(propriedadeId, foto);
+      fotoPath = resultado.caminho;
+      if (resultado.erro) setAvisoFoto(`${resultado.erro} O pasto foi salvo sem a foto.`);
+    }
 
     await enfileirarOperacao("pastos", "POST", {
       nome,
@@ -34,6 +50,7 @@ export function FormularioPasto() {
       tem_acude: temAcude,
       nivel_acude: temAcude && nivelAcude ? Number(nivelAcude) : null,
       observacao: observacao || null,
+      foto_path: fotoPath,
     });
 
     setSalvando(false);
@@ -44,6 +61,7 @@ export function FormularioPasto() {
     setTemAcude(false);
     setNivelAcude("");
     setObservacao("");
+    setFoto(null);
     router.refresh();
   }
 
@@ -110,6 +128,17 @@ export function FormularioPasto() {
           <div className="flex flex-col gap-2 sm:col-span-2">
             <Label htmlFor="observacao">Observação</Label>
             <Input id="observacao" value={observacao} onChange={(e) => setObservacao(e.target.value)} />
+          </div>
+          <div className="flex flex-col gap-2 sm:col-span-2">
+            <Label htmlFor="foto">Foto do pasto</Label>
+            <input
+              id="foto"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={selecionarFoto}
+              className="text-sm text-foreground file:mr-3 file:rounded-md file:border-0 file:bg-accent file:px-3 file:py-2 file:text-sm file:font-medium"
+            />
+            {avisoFoto && <p className="text-xs text-critico">{avisoFoto}</p>}
           </div>
           <div className="sm:col-span-2">
             <Button type="submit" disabled={salvando}>
