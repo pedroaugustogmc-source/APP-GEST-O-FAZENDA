@@ -22,6 +22,12 @@ export function FotoPasto({ pastoId, propriedadeId, fotoPathAtual, fotoUrl }: Fo
   const inputRef = useRef<HTMLInputElement>(null);
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  // Rastreia o último caminho que ESTA aba trocou nesta sessão (distinto de
+  // `fotoPathAtual`, que só reflete o último valor confirmado pelo
+  // servidor). Sem isso, trocar a foto 2x seguidas antes da 1ª sincronizar
+  // apontaria as duas limpezas pro mesmo arquivo original, deixando a foto
+  // do meio órfã pra sempre no bucket — achado em revisão de código.
+  const [ultimoCaminhoNestaSessao, setUltimoCaminhoNestaSessao] = useState<string | null>(null);
 
   async function trocarFoto(evento: ChangeEvent<HTMLInputElement>) {
     const arquivo = evento.target.files?.[0];
@@ -43,22 +49,17 @@ export function FotoPasto({ pastoId, propriedadeId, fotoPathAtual, fotoUrl }: Fo
     // ou numa retentativa de fundo minutos depois, se a rede falhar agora
     // (limpezaAoConcluir, ver src/infra/offline/sincronizar.ts). Sem isso,
     // apagar cedo demais deixaria o card sem foto nenhuma até a próxima
-    // tentativa terminar.
-    //
-    // Limitação aceita e declarada (achado em revisão de código, não
-    // corrigido por ser desproporcional ao ganho): `fotoPathAtual` é só o
-    // valor que a tela tinha ao carregar, não o histórico completo. Se o
-    // dono trocar a foto duas vezes offline antes da 1ª troca sincronizar,
-    // a foto do meio (nunca virou "fotoPathAtual" de nenhuma chamada) fica
-    // órfã no bucket pra sempre. `pastos.foto_path` no banco e a foto
-    // exibida na tela sempre terminam corretos — o efeito é só espaço não
-    // aproveitado no Storage, nunca dado errado.
+    // tentativa terminar. `ultimoCaminhoNestaSessao ?? fotoPathAtual`
+    // encadeia trocas sucessivas corretamente mesmo que a anterior ainda
+    // não tenha sincronizado.
+    const caminhoParaApagar = ultimoCaminhoNestaSessao ?? fotoPathAtual;
     await enfileirarOperacao(
       "pastos",
       "PATCH",
       { id: pastoId, foto_path: resultado.caminho },
-      fotoPathAtual ? { limpezaAoConcluir: { bucket: "fotos-pastos", caminho: fotoPathAtual } } : undefined
+      caminhoParaApagar ? { limpezaAoConcluir: { bucket: "fotos-pastos", caminho: caminhoParaApagar } } : undefined
     );
+    setUltimoCaminhoNestaSessao(resultado.caminho);
     // enfileirarOperacao só grava local e dispara a sincronização em
     // segundo plano — sem esperar ela terminar, o refresh abaixo
     // recarregaria antes do PATCH chegar no servidor e a foto pareceria não
