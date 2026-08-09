@@ -40,8 +40,15 @@ export function NavLink({
       aria-current={ativo ? "page" : undefined}
       className={cn(
         "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors",
+        // bg-primary (verde escuro) sobre bg-secondary (marrom escuro) do
+        // menu lateral tem quase a mesma luminosidade — a diferença é só de
+        // matiz, difícil de perceber a olho (pior ainda com sol forte na
+        // tela, condição real de uso do §38). bg-accent é claro (85% de
+        // luminosidade) contra um fundo escuro — contraste alto de verdade,
+        // não sutil. Mesma cor que o menu do celular ("topo") já usa pra
+        // marcar a página ativa.
         ativo
-          ? "bg-primary text-primary-foreground"
+          ? "bg-accent text-accent-foreground font-semibold"
           : "text-secondary-foreground/90 hover:bg-secondary-foreground/10 hover:text-secondary-foreground"
       )}
     >
