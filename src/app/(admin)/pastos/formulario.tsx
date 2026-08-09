@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { enfileirarOperacao } from "@/infra/offline/fila";
+import { enfileirarOperacao, gerarClientUuid } from "@/infra/offline/fila";
 import { sincronizar } from "@/infra/offline/sincronizar";
 import { enviarFotoPasto } from "@/infra/supabase/fotoPasto";
 
@@ -33,14 +33,7 @@ export function FormularioPasto({ propriedadeId }: { propriedadeId: string }) {
     setSalvando(true);
     setAvisoFoto(null);
 
-    let fotoPath: string | null = null;
-    if (foto) {
-      const resultado = await enviarFotoPasto(propriedadeId, foto);
-      fotoPath = resultado.caminho;
-      if (resultado.erro) setAvisoFoto(`${resultado.erro} O pasto foi salvo sem a foto.`);
-    }
-
-    await enfileirarOperacao("pastos", "POST", {
+    const dadosBase = {
       nome,
       apelidos: apelidos
         .split(",")
@@ -51,8 +44,28 @@ export function FormularioPasto({ propriedadeId }: { propriedadeId: string }) {
       tem_acude: temAcude,
       nivel_acude: temAcude && nivelAcude ? Number(nivelAcude) : null,
       observacao: observacao || null,
-      foto_path: fotoPath,
-    });
+    };
+
+    // O cadastro entra na fila na hora, sem esperar o upload da foto —
+    // regra 8 do CLAUDE.md, nunca bloquear a UI por falta de rede (achado
+    // em revisão de código: antes, um upload lento numa conexão rural fraca
+    // travava o cadastro inteiro, não só a foto). client_uuid fixo aqui
+    // porque, se a foto subir, mando um 2º POST com o mesmo valor — POST é
+    // upsert por client_uuid (criarRotaEntidade.ts) — que atualiza a MESMA
+    // linha sem precisar do id que o servidor ainda não gerou.
+    const clientUuid = gerarClientUuid();
+
+    await enfileirarOperacao("pastos", "POST", { ...dadosBase, foto_path: null }, clientUuid);
+
+    if (foto) {
+      const resultado = await enviarFotoPasto(propriedadeId, foto);
+      if (resultado.erro) {
+        setAvisoFoto(`${resultado.erro} O pasto foi salvo sem a foto.`);
+      } else if (resultado.caminho) {
+        await enfileirarOperacao("pastos", "POST", { ...dadosBase, foto_path: resultado.caminho }, clientUuid);
+      }
+    }
+
     // enfileirarOperacao só grava no IndexedDB local e dispara a
     // sincronização em segundo plano (void sincronizar(), fila.ts) — sem
     // esperar ela terminar aqui, o router.refresh() abaixo recarrega a

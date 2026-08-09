@@ -3,7 +3,7 @@
 import { useRef, useState, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { enfileirarOperacao } from "@/infra/offline/fila";
+import { enfileirarOperacao, estaPendente } from "@/infra/offline/fila";
 import { sincronizar } from "@/infra/offline/sincronizar";
 import { enviarFotoPasto, removerFotoPasto } from "@/infra/supabase/fotoPasto";
 
@@ -38,13 +38,23 @@ export function FotoPasto({ pastoId, propriedadeId, fotoPathAtual, fotoUrl }: Fo
       return;
     }
 
-    await enfileirarOperacao("pastos", "PATCH", { id: pastoId, foto_path: resultado.caminho });
+    const clientUuid = await enfileirarOperacao("pastos", "PATCH", { id: pastoId, foto_path: resultado.caminho });
     // Mesmo motivo do formulario.tsx: enfileirarOperacao só grava local e
     // dispara a sincronização em segundo plano — sem esperar ela terminar, o
     // refresh abaixo recarregaria antes do PATCH chegar no servidor e a foto
     // pareceria não ter sido trocada.
     await sincronizar();
-    if (fotoPathAtual) void removerFotoPasto(fotoPathAtual);
+
+    // sincronizar() engole erro de rede/servidor pra poder tentar de novo
+    // depois (não rejeita a promise) — "terminou" não é o mesmo que "deu
+    // certo". Só apaga a foto antiga do bucket se a operação realmente saiu
+    // da fila dentro desta chamada; se ficou pendente, a foto antiga fica
+    // órfã no bucket até alguém trocar de novo (nenhuma tentativa
+    // automática posterior — 30s/volta da rede, sincronizar.ts — dispara
+    // essa limpeza; é um efeito colateral aceito, não um vazamento de dado).
+    if (fotoPathAtual && !(await estaPendente(clientUuid))) {
+      void removerFotoPasto(fotoPathAtual);
+    }
 
     setEnviando(false);
     router.refresh();
